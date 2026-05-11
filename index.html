@@ -3,9 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>TNV Duel Arena | Official Bridge</title>
+    <title>TNV Duel Arena | Official World App Build</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@worldcoin/mini-app-sdk@0.1.0/dist/index.js"></script>
     <style>
         :root { --tnv: #00ff88; --gold: #ffd700; }
         body { background: #121212; color: white; font-family: 'Segoe UI', sans-serif; text-align: center; margin: 0; overflow: hidden; }
@@ -15,14 +15,14 @@
         .progress-bar { width: 60%; height: 8px; background: #333; border-radius: 4px; overflow: hidden; }
         .progress-fill { height: 100%; background: var(--tnv); width: 0%; transition: 0.5s; }
         .leaderboard-section { margin: 20px 10px; background: #1a1a1a; border-radius: 15px; border: 1px solid #333; overflow: hidden; }
-        .lb-header { background: #252525; padding: 12px; color: var(--tnv); font-weight: bold; }
+        .lb-header { background: #252525; padding: 12px; color: var(--tnv); font-weight: bold; border-bottom: 1px solid #333; }
         .lb-table { width: 100%; border-collapse: collapse; font-size: 11px; }
-        .lb-table th { padding: 10px; background: #222; color: #888; text-transform: uppercase; }
+        .lb-table th { padding: 10px; background: #222; color: #888; }
         .lb-table td { padding: 12px 5px; border-bottom: 1px solid #222; }
         .btn { background: var(--tnv); color: black; border: none; padding: 18px 30px; font-size: 18px; border-radius: 12px; font-weight: bold; width: 85%; cursor: pointer; }
         .btn:disabled { background: #444; color: #888; }
         
-        /* Game Screens */
+        /* Game Screen CSS */
         .stats-box { display: flex; justify-content: space-around; padding: 15px; background: #252525; margin: 15px; border-radius: 15px; border: 1px solid #333; }
         .scene { width: 100px; height: 100px; margin: 40px auto; perspective: 600px; }
         .cube { width: 100%; height: 100%; position: relative; transform-style: preserve-3d; transition: transform 0.2s; cursor: pointer; }
@@ -54,8 +54,7 @@
 
     <div id="setup-screen">
         <div style="padding: 20px;">
-            <button class="btn" id="start-btn" onclick="masterConnect()">PLAY NOW</button>
-            <p id="debug-msg" style="font-size:10px; color:#555; margin-top:5px;"></p>
+            <button class="btn" id="start-btn" onclick="worldConnect()">PLAY NOW</button>
         </div>
         <div class="leaderboard-section">
             <div class="lb-header">🏆 GLOBAL RANKINGS</div>
@@ -88,39 +87,37 @@
 
         window.onload = loadLeaderboard;
 
-        // MASTER CONNECT: World App Native standard
-        async function masterConnect() {
+        // OFFICIAL WORLD APP NATIVE CONNECTION
+        async function worldConnect() {
             const btn = document.getElementById('start-btn');
-            const debug = document.getElementById('debug-msg');
             btn.disabled = true;
-            btn.innerText = "LINKING WALLET...";
+            btn.innerText = "BRIDGE CONNECTING...";
 
             try {
-                // Priority 1: World App Injected Provider (EIP-6963 / EIP-1193)
-                const provider = window.ethereum || (window.parent && window.parent.ethereum);
-                
-                if (provider) {
-                    const accounts = await provider.request({ method: 'eth_requestAccounts' });
+                // Method 1: Try the Official Mini-App SDK (Standard for World App)
+                if (window.MiniApp) {
+                    const result = await window.MiniApp.getWalletAddress();
+                    if (result) myAddress = result;
+                }
+
+                // Method 2: Fallback to EIP-1193 with extra delay for Bridge
+                if (!myAddress && window.ethereum) {
+                    const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
                     myAddress = accounts[0];
-                } else {
-                    // Priority 2: Fallback for some Mini App versions
-                    const res = await window.request({ method: 'eth_accounts' });
-                    myAddress = res[0];
                 }
 
                 if (myAddress) {
-                    btn.innerText = "READY!";
+                    btn.innerText = "SUCCESS!";
                     loadRewards();
                     initMatchmaking();
                 } else {
-                    throw new Error("No address found");
+                    throw new Error("No Address");
                 }
             } catch (err) {
-                console.error(err);
+                console.error("Connection failed:", err);
                 btn.disabled = false;
-                btn.innerText = "RETRY CONNECTION";
-                debug.innerText = "Status: Please open in World App Apps section.";
-                alert("Connection failed. Make sure you are using the World App.");
+                btn.innerText = "PLAY NOW";
+                alert("Please open this game from the 'Apps' tab inside the World App.");
             }
         }
 
@@ -133,7 +130,9 @@
                 if (timeLeft <= 0 || gameActive) { clearInterval(mTimer); if (!gameActive) location.reload(); }
             }, 1000);
 
-            const { data } = await supabaseClient.rpc('join_or_create_match', { p_address: myAddress });
+            const { data, error } = await supabaseClient.rpc('join_or_create_match', { p_address: myAddress });
+            if (error) { alert("Matchmaking error."); location.reload(); return; }
+
             matchId = data.match_id; isP1 = data.is_p1;
 
             channel = supabaseClient.channel(`room_${matchId}`, { config: { broadcast: { self: true } } });
