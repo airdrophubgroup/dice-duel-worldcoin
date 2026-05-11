@@ -3,30 +3,123 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>TNV Arena | Final Fix</title>
+    <title>TNV Duel Arena | Token Enabled</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js"></script>
     <style>
         :root { --tnv: #00ff88; }
-        body { background: #121212; color: white; font-family: sans-serif; text-align: center; margin: 0; }
-        .header { padding: 20px; background: #1e1e1e; border-bottom: 2px solid var(--tnv); }
-        .stats-box { display: flex; justify-content: space-around; padding: 15px; background: #252525; margin: 15px; border-radius: 15px; }
-        .scene { width: 100px; height: 100px; margin: 40px auto; perspective: 600px; }
+        body { background: #121212; color: white; font-family: 'Segoe UI', sans-serif; text-align: center; margin: 0; overflow: hidden; }
+        
+        /* Realistic Coin Symbol (image_7.png based) */
+        .tnv-token {
+            display: inline-block;
+            width: 22px;
+            height: 22px;
+            background: linear-gradient(145deg, #cd7f32, #ffd700); /* bronze to gold */
+            border-radius: 50%;
+            color: #121212;
+            font-weight: bold;
+            font-size: 13px;
+            line-height: 22px;
+            border: 2px solid #ffd700; /* gold border */
+            box-shadow: 0 0 8px rgba(255,215,0,0.5);
+            margin-left: 5px;
+            vertical-align: middle;
+            text-shadow: 1px 1px 0 rgba(255,255,255,0.3);
+        }
+
+        .header { padding: 15px; background: #1e1e1e; border-bottom: 2px solid var(--tnv); box-shadow: 0 4px 15px rgba(0,0,0,0.5); }
+        
+        /* Realistic Progress Bar & Token Info */
+        .tnv-container { display: flex; align-items: center; justify-content: center; margin-top: 8px; }
+        .progress-bar { width: 70%; height: 8px; background: #333; border-radius: 4px; overflow: hidden; }
+        .progress-fill { height: 100%; background: var(--tnv); width: 0%; transition: 0.5s; box-shadow: 0 0 10px var(--tnv); }
+        .balance-text { font-size: 15px; color: #fff; margin-left: 10px; font-weight: bold; }
+
+        .stats-box { display: flex; justify-content: space-around; padding: 15px; background: #252525; margin: 15px; border-radius: 15px; border: 1px solid #333; }
+        
+        /* Dice Scene (unchanged) */
+        .scene { width: 100px; height: 100px; margin: 50px auto; perspective: 600px; }
         .cube { width: 100%; height: 100%; position: relative; transform-style: preserve-3d; transition: transform 0.2s; }
         .cube__face { position: absolute; width: 100px; height: 100px; border: 2px solid #333; line-height: 100px; font-size: 40px; background: white; color: black; border-radius: 10px; font-weight: bold; }
         .front { transform: rotateY(0deg) translateZ(50px); } .back { transform: rotateY(180deg) translateZ(50px); }
         .right { transform: rotateY(90deg) translateZ(50px); } .left { transform: rotateY(-90deg) translateZ(50px); }
         .top { transform: rotateX(90deg) translateZ(50px); } .bottom { transform: rotateX(-90deg) translateZ(50px); }
-        .btn { background: var(--tnv); color: black; border: none; padding: 18px 30px; font-size: 18px; border-radius: 12px; font-weight: bold; width: 80%; cursor: pointer; }
+        
+        .btn { background: var(--tnv); color: black; border: none; padding: 18px 30px; font-size: 18px; border-radius: 12px; font-weight: bold; width: 80%; cursor: pointer; transition: 0.3s; box-shadow: 0 5px 15px rgba(0,255,136,0.3); }
+        
         .leaderboard { margin: 20px; background: #1a1a1a; padding: 10px; border-radius: 10px; border: 1px solid #333; }
         .lb-row { display: flex; justify-content: space-between; padding: 8px; border-bottom: 1px solid #222; font-size: 13px; }
+
+        /* Realistic Loading Intro & Animated Logo */
+        #loading-intro {
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(18, 18, 18, 0.98);
+            z-index: 999;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.5s ease;
+        }
+        #loading-intro.show { opacity: 1; pointer-events: auto; }
+        .duel-logo {
+            width: 150px;
+            height: 150px;
+            background: #121212;
+            border-radius: 20px;
+            border: 2px solid var(--tnv);
+            margin-bottom: 20px;
+            /* Dice background SVG with pulse effect */
+            background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="150" height="150" viewBox="0 0 150 150"><text x="50%" y="50%" text-anchor="middle" font-size="24" fill="%2300ff88" font-family="Arial">DICE DUEL</text></svg>');
+            background-size: cover;
+            animation: pulse 1.5s infinite;
+        }
+
+        /* Falling Animated TNV Tokens CSS */
+        .token {
+            position: absolute;
+            width: 30px;
+            height: 30px;
+            background: linear-gradient(145deg, #cd7f32, #ffd700);
+            border-radius: 50%;
+            color: #121212;
+            font-weight: bold;
+            font-size: 18px;
+            line-height: 30px;
+            border: 2px solid #ffd700;
+            box-shadow: 0 0 10px rgba(255,215,0,0.7);
+            z-index: 1000;
+            animation: fall 1.2s linear forwards;
+        }
+
+        /* Keyframes */
+        @keyframes pulse { 0% { transform: scale(1); opacity: 1; } 50% { transform: scale(1.03); opacity: 0.9; } 100% { transform: scale(1); opacity: 1; } }
+        @keyframes fall {
+            0% { transform: translateY(-100px) rotateY(0deg); opacity: 1; }
+            80% { transform: translateY(80vh) rotateY(288deg); opacity: 1; }
+            100% { transform: translateY(100vh) rotateY(360deg); opacity: 0; }
+        }
     </style>
 </head>
 <body>
 
+    <div id="loading-intro">
+        <div class="duel-logo">DICE DUEL</div>
+        <p style="color: var(--tnv); font-weight: bold;">Loading Dueling Protocols...</p>
+    </div>
+
     <div class="header">
-        <h1>TNV Duel Arena 🎲</h1>
-        <div id="tnv-display">Balance: Loading...</div>
+        <h1>TNV Duel Arena🎲</h1>
+        <div class="tnv-container">
+            <div class="progress-bar"><div id="p-fill" class="progress-fill"></div></div>
+            <div id="tnv-display" class="balance-text">
+                <span id="balance-num">Loading...</span><span class="tnv-token">TNV</span>
+            </div>
+        </div>
     </div>
 
     <div id="setup-screen" style="padding: 40px 10px;">
@@ -40,18 +133,20 @@
 
     <div id="game-screen" style="display:none;">
         <div class="stats-box">
-            <div>ME: <span id="my-score">0</span></div>
+            <div>ME: <span id="my-score" style="font-size: 20px; font-weight: bold;">0</span><span class="tnv-token">TNV</span></div>
             <div id="timer" style="color: #ff4444; font-weight: bold; font-size: 24px;">30s</div>
-            <div>OPP: <span id="opp-score">0</span></div>
+            <div>OPP: <span id="opp-score" style="font-size: 20px; font-weight: bold;">0</span><span class="tnv-token">TNV</span></div>
         </div>
         <div class="scene" onclick="rollDice()"><div class="cube" id="dice-cube">
             <div class="cube__face front">1</div><div class="cube__face back">6</div>
             <div class="cube__face right">3</div><div class="cube__face left">4</div>
             <div class="cube__face top">2</div><div class="cube__face bottom">5</div>
         </div></div>
+        <p style="font-size: 16px; color: var(--tnv); font-weight: bold;">TAP THE DICE FAST TO SCORE!</p>
     </div>
 
     <script>
+        // Core functional logic remains untouched
         const SB_URL = "https://efmkazyrxllcyvcwmewd.supabase.co";
         const SB_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVmbWthenlyeGxsY3l2Y3dtZXdkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg0ODYzMTMsImV4cCI6MjA5NDA2MjMxM30.PaKHyjZOkDCcyK0x7Qd1_DSSTS_ra5PYDuZwYIf5GyA";
         const supabaseClient = supabase.createClient(SB_URL, SB_KEY);
@@ -60,7 +155,7 @@
 
         window.onload = async () => {
             const { data } = await supabaseClient.from('user_rewards').select('wallet_address, tnv_balance').order('tnv_balance', { ascending: false }).limit(5);
-            if(data) document.getElementById('leaderboard-list').innerHTML = data.map((u, i) => `<div class="lb-row"><span>#${i+1} ${u.wallet_address.slice(0,6)}...</span><span>${u.tnv_balance} TNV</span></div>`).join('');
+            if(data) document.getElementById('leaderboard-list').innerHTML = data.map((u, i) => `<div class="lb-row"><span>#${i+1} ${u.wallet_address.slice(0,6)}...</span><span>${u.tnv_balance}<span class="tnv-token">TNV</span></span></div>`).join('');
         };
 
         async function initGame() {
@@ -72,20 +167,14 @@
             }
             document.getElementById('start-btn').disabled = true;
             document.getElementById('status-msg').innerText = "Matching...";
+            loadRewards();
             
-            // 100% Solid Matchmaking via RPC
             const { data, error } = await supabaseClient.rpc('join_or_create_match', { p_address: myAddress });
             if(error) return alert("RPC Error: " + error.message);
             
             matchId = data.match_id;
             isP1 = data.is_p1;
             
-            // Start listening
-            sync();
-        }
-
-        function sync() {
-            // Backup Polling
             setInterval(async () => {
                 const { data } = await supabaseClient.from('matches').select('*').eq('id', matchId).single();
                 if(data) {
@@ -96,15 +185,32 @@
             }, 1000);
         }
 
+        async function loadRewards() {
+            const { data } = await supabaseClient.from('user_rewards').select('tnv_balance').eq('wallet_address', myAddress).single();
+            if(data) {
+                document.getElementById('balance-num').innerText = `${data.tnv_balance}`;
+                document.getElementById('p-fill').style.width = Math.min((data.tnv_balance / 500 * 100), 100) + "%";
+            }
+        }
+
         function startGame() {
-            document.getElementById('setup-screen').style.display = 'none';
-            document.getElementById('game-screen').style.display = 'block';
-            gameActive = true;
-            const timer = setInterval(() => {
-                timeLeft--;
-                document.getElementById('timer').innerText = timeLeft + "s";
-                if(timeLeft <= 0) { clearInterval(timer); if(gameActive) endGame(); }
-            }, 1000);
+            // Show Loading Intro
+            showIntro();
+
+            setTimeout(() => {
+                hideIntro();
+                document.getElementById('setup-screen').style.display = 'none';
+                document.getElementById('game-screen').style.display = 'block';
+                gameActive = true;
+                // Realistic falling coins effect
+                makeCoinsFall(25);
+                
+                const timer = setInterval(() => {
+                    timeLeft--;
+                    document.getElementById('timer').innerText = timeLeft + "s";
+                    if(timeLeft <= 0) { clearInterval(timer); if(gameActive) endGame(); }
+                }, 1000);
+            }, 3000); // 3-second Intro delay
         }
 
         async function rollDice() {
@@ -118,15 +224,45 @@
         async function endGame() {
             if(!gameActive) return; gameActive = false;
             await supabaseClient.from('matches').update({ status: 'finished' }).eq('id', matchId);
+            
+            // Victory/Defeat effects
+            makeCoinsFall(15); 
+
             setTimeout(async () => {
                 const { data: m } = await supabaseClient.from('matches').select('*').eq('id', matchId).single();
                 const myF = isP1 ? m.p1_score : m.p2_score;
                 const opF = isP1 ? m.p2_score : m.p1_score;
                 const win = myF > opF;
                 await supabaseClient.rpc('increment_tnv', { player_wallet: myAddress, amount: win ? 15 : 10 });
+                
+                hideIntro();
                 alert(win ? "YOU WIN!" : "GAME OVER");
                 location.reload();
             }, 1000);
+        }
+
+        // Helper functions for new Realistic View features
+
+        function showIntro() {
+            document.getElementById('loading-intro').classList.add('show');
+        }
+
+        function hideIntro() {
+            document.getElementById('loading-intro').classList.remove('remove');
+        }
+
+        // Creates animated falling TNV tokens
+        function makeCoinsFall(amount) {
+            for (let i = 0; i < amount; i++) {
+                const token = document.createElement('div');
+                token.className = 'token';
+                token.innerText = 'T'; // Simple T for realistic token look
+                token.style.left = Math.random() * 100 + 'vw';
+                token.style.animationDelay = Math.random() * 0.5 + 's';
+                document.body.appendChild(token);
+                // Remove element after animation ends
+                setTimeout(() => token.remove(), 1700); 
+            }
         }
     </script>
 </body>
