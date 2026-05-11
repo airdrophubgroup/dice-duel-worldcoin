@@ -7,42 +7,84 @@
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js"></script>
     <style>
-        :root { --tnv: #00ff88; }
-        body { background: #121212; color: white; font-family: sans-serif; text-align: center; margin: 0; overflow: hidden; }
+        :root { --tnv: #00ff88; --gold: #ffd700; }
+        body { background: #121212; color: white; font-family: 'Segoe UI', sans-serif; text-align: center; margin: 0; overflow-x: hidden; }
+        
+        /* Realistic Coin Symbol */
+        .tnv-token {
+            display: inline-block; width: 18px; height: 18px;
+            background: linear-gradient(145deg, #cd7f32, #ffd700);
+            border-radius: 50%; color: #121212; font-weight: bold;
+            font-size: 11px; line-height: 18px; border: 1px solid #ffd700;
+            box-shadow: 0 0 5px rgba(255,215,0,0.5); vertical-align: middle;
+        }
+
         .header { padding: 15px; background: #1e1e1e; border-bottom: 2px solid var(--tnv); }
+        .tnv-container { display: flex; align-items: center; justify-content: center; margin-top: 8px; }
+        .progress-bar { width: 60%; height: 8px; background: #333; border-radius: 4px; overflow: hidden; }
+        .progress-fill { height: 100%; background: var(--tnv); width: 0%; transition: 0.5s; }
+
+        /* Pro Leaderboard Design */
+        .leaderboard-section { margin: 25px 10px; background: #1a1a1a; border-radius: 15px; border: 1px solid #333; overflow: hidden; }
+        .lb-header { background: #252525; padding: 12px; color: var(--tnv); font-weight: bold; font-size: 18px; border-bottom: 1px solid #333; }
+        .lb-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+        .lb-table th { padding: 10px; background: #222; color: #888; text-transform: uppercase; border-bottom: 1px solid #333; }
+        .lb-table td { padding: 12px 8px; border-bottom: 1px solid #222; }
+        .rank-highlight { color: var(--gold); font-weight: bold; }
+        
         .stats-box { display: flex; justify-content: space-around; padding: 15px; background: #252525; margin: 15px; border-radius: 15px; border: 1px solid #333; }
-        .timer-text { color: #ff4444; font-weight: bold; font-size: 32px; }
         .scene { width: 100px; height: 100px; margin: 40px auto; perspective: 600px; }
         .cube { width: 100%; height: 100%; position: relative; transform-style: preserve-3d; transition: transform 0.2s; }
-        .cube__face { position: absolute; width: 100px; height: 100px; border: 2px solid #333; line-height: 100px; font-size: 40px; background: white; color: black; border-radius: 10px; font-weight: bold; }
+        .cube__face { position: absolute; width: 100px; height: 100px; border: 2px solid #333; line-height: 100px; font-size: 40px; background: white; color: black; border-radius: 10px; font-weight: bold; display: flex; justify-content: center; align-items: center; }
         .front { transform: rotateY(0deg) translateZ(50px); } .back { transform: rotateY(180deg) translateZ(50px); }
         .right { transform: rotateY(90deg) translateZ(50px); } .left { transform: rotateY(-90deg) translateZ(50px); }
         .top { transform: rotateX(90deg) translateZ(50px); } .bottom { transform: rotateX(-90deg) translateZ(50px); }
-        .btn { background: var(--tnv); color: black; border: none; padding: 18px 30px; font-size: 18px; border-radius: 12px; font-weight: bold; width: 85%; cursor: pointer; }
+        
+        .btn { background: var(--tnv); color: black; border: none; padding: 18px 30px; font-size: 18px; border-radius: 12px; font-weight: bold; width: 85%; cursor: pointer; margin: 10px 0; }
         .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
         #loading-intro { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #121212; z-index: 999; display: none; flex-direction: column; align-items: center; justify-content: center; }
-        .duel-logo { width: 120px; height: 120px; border: 4px solid var(--tnv); border-radius: 20px; color: var(--tnv); font-size: 22px; display: flex; align-items: center; justify-content: center; font-weight: bold; animation: pulse 1s infinite; }
-        @keyframes pulse { 0%, 100% {transform: scale(1);} 50% {transform: scale(1.1);} }
+        .duel-logo { width: 120px; height: 120px; border: 4px solid var(--tnv); border-radius: 20px; color: var(--tnv); font-size: 22px; display: flex; align-items: center; justify-content: center; font-weight: bold; animation: pulse 1s infinite; margin-bottom: 20px; }
     </style>
 </head>
 <body>
 
-    <div id="loading-intro"><div class="duel-logo">DICE DUEL</div><p id="loading-text" style="color: var(--tnv);">WAITING FOR SYNC...</p></div>
+    <div id="loading-intro">
+        <div class="duel-logo">DICE DUEL</div>
+        <p id="loading-text" style="color: var(--tnv); font-weight: bold;">SYNCING WITH OPPONENT...</p>
+    </div>
 
     <div class="header">
         <h1>TNV Duel Arena🎲</h1>
-        <div id="tnv-display">Balance: Loading...</div>
+        <div class="tnv-container">
+            <div class="progress-bar"><div id="p-fill" class="progress-fill"></div></div>
+            <div style="margin-left:10px;"><span id="balance-num" style="font-weight:bold;">0</span><span class="tnv-token"></span></div>
+        </div>
     </div>
 
-    <div id="setup-screen" style="padding: 40px 10px;">
-        <button class="btn" id="start-btn" onclick="initGame()">PLAY NOW (0.5 WLD)</button>
-        <p id="status-msg" style="margin-top:15px; color:var(--tnv)">Ready</p>
+    <div id="setup-screen">
+        <div style="padding: 20px;">
+            <button class="btn" id="start-btn" onclick="initGame()">PLAY NOW (0.5 WLD)</button>
+            <p id="status-msg" style="font-size:14px; color:var(--tnv); margin-top:10px;">Ready to Duel</p>
+        </div>
+
+        <div class="leaderboard-section">
+            <div class="lb-header">🏆 GLOBAL RANKINGS</div>
+            <table class="lb-table">
+                <thead>
+                    <tr><th>Rank</th><th>Player</th><th>Played</th><th>Won</th><th>TNV</th></tr>
+                </thead>
+                <tbody id="leaderboard-body">
+                    <tr><td colspan="5">Loading...</td></tr>
+                </tbody>
+            </table>
+        </div>
     </div>
 
     <div id="game-screen" style="display:none;">
         <div class="stats-box">
             <div>ME: <span id="my-score">0</span></div>
-            <div id="timer" class="timer-text">30s</div>
+            <div id="timer" style="color: #ff4444; font-weight: bold; font-size: 28px;">30s</div>
             <div>OPP: <span id="opp-score">0</span></div>
         </div>
         <div class="scene" onclick="rollDice()"><div class="cube" id="dice-cube">
@@ -59,58 +101,80 @@
 
         let myAddress, matchId, isP1, myScore = 0, oppScore = 0, gameActive = false, timeLeft = 30;
 
+        window.onload = loadLeaderboard;
+
+        async function loadLeaderboard() {
+            const { data } = await supabaseClient.from('user_rewards').select('*').order('tnv_balance', { ascending: false }).limit(10);
+            if(data) {
+                document.getElementById('leaderboard-body').innerHTML = data.map((u, i) => `
+                    <tr class="${i < 3 ? 'rank-highlight' : ''}">
+                        <td>#${i+1}</td>
+                        <td style="font-family:monospace">${u.wallet_address.slice(0,6)}...</td>
+                        <td>${u.games_played || 0}</td>
+                        <td>${u.games_won || 0}</td>
+                        <td>${u.tnv_balance} <span class="tnv-token"></span></td>
+                    </tr>
+                `).join('');
+            }
+        }
+
         async function initGame() {
-            document.getElementById('start-btn').disabled = true;
+            const startBtn = document.getElementById('start-btn');
+            startBtn.disabled = true;
             if (window.ethereum) {
                 const accs = await window.ethereum.request({ method: 'eth_requestAccounts' });
                 myAddress = accs[0];
             } else { myAddress = "GUEST_" + Math.floor(Math.random()*1000); }
             
+            loadRewards();
+            
             const { data } = await supabaseClient.rpc('join_or_create_match', { p_address: myAddress });
             matchId = data.match_id; isP1 = data.is_p1;
             
-            // Step 1: Send "READY" signal to DB
+            // Mark myself as READY
             const readyUpdate = isP1 ? { p1_ready: true } : { p2_ready: true };
             await supabaseClient.from('matches').update(readyUpdate).eq('id', matchId);
 
             document.getElementById('loading-intro').style.display = 'flex';
 
-            // Step 2: Listen for BOTH players to be ready
-            supabaseClient.channel(`m_${matchId}`).on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'matches', filter: `id=eq.${matchId}` }, payload => {
+            // Start Realtime Channel
+            const channel = supabaseClient.channel(`match_${matchId}`)
+            .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'matches', filter: `id=eq.${matchId}` }, payload => {
                 const d = payload.new;
+                document.getElementById('opp-score').innerText = isP1 ? d.p2_score : d.p1_score;
                 oppScore = isP1 ? d.p2_score : d.p1_score;
-                document.getElementById('opp-score').innerText = oppScore;
 
-                // Sync Start Logic
+                // Sync Start: Only start when BOTH are ready
                 if(d.p1_ready && d.p2_ready && d.status === 'playing' && !gameActive) {
-                    startCountdown();
+                    startSyncCountdown();
                 }
 
-                // Sync End Logic
+                // Sync End: Force stop when status is finished
                 if(d.status === 'finished' && gameActive) {
+                    gameActive = false;
                     handleGameOver();
                 }
             }).subscribe();
         }
 
-        function startCountdown() {
+        function startSyncCountdown() {
             gameActive = true;
-            let count = 3;
-            const introText = document.getElementById('loading-text');
-            const cd = setInterval(() => {
-                introText.innerText = `STARTING IN ${count}...`;
+            let count = 4; // Extra second to account for lag
+            const loader = document.getElementById('loading-text');
+            const timer = setInterval(() => {
                 count--;
-                if(count < 0) {
-                    clearInterval(cd);
+                if(count > 0) loader.innerText = `STARTING IN ${count}...`;
+                if(count === 0) {
+                    clearInterval(timer);
                     document.getElementById('loading-intro').style.display = 'none';
                     document.getElementById('setup-screen').style.display = 'none';
                     document.getElementById('game-screen').style.display = 'block';
-                    runTimer();
+                    runGameTimer();
                 }
             }, 1000);
         }
 
-        function runTimer() {
+        function runGameTimer() {
             const t = setInterval(() => {
                 if(!gameActive) { clearInterval(t); return; }
                 timeLeft--;
@@ -122,6 +186,14 @@
             }, 1000);
         }
 
+        async function loadRewards() {
+            const { data } = await supabaseClient.from('user_rewards').select('tnv_balance').eq('wallet_address', myAddress).single();
+            if(data) {
+                document.getElementById('balance-num').innerText = data.tnv_balance;
+                document.getElementById('p-fill').style.width = Math.min((data.tnv_balance / 500 * 100), 100) + "%";
+            }
+        }
+
         async function rollDice() {
             if(!gameActive) return;
             myScore += Math.floor(Math.random() * 6) + 1;
@@ -131,23 +203,26 @@
         }
 
         async function finishMatch() {
-            // Force status to 'finished' so both devices stop
             await supabaseClient.from('matches').update({ status: 'finished' }).eq('id', matchId);
         }
 
         async function handleGameOver() {
-            gameActive = false;
-            // Chota delay taaki final scores sync ho sakein
             setTimeout(async () => {
                 const { data: m } = await supabaseClient.from('matches').select('*').eq('id', matchId).single();
                 const myF = isP1 ? m.p1_score : m.p2_score;
                 const opF = isP1 ? m.p2_score : m.p1_score;
                 const win = myF > opF;
 
+                const { data: cur } = await supabaseClient.from('user_rewards').select('games_played, games_won').eq('wallet_address', myAddress).single();
+                await supabaseClient.from('user_rewards').update({ 
+                    games_played: (cur.games_played || 0) + 1,
+                    games_won: win ? (cur.games_won || 0) + 1 : (cur.games_won || 0)
+                }).eq('wallet_address', myAddress);
+
                 await supabaseClient.rpc('increment_tnv', { player_wallet: myAddress, amount: win ? 15 : 10 });
                 alert(win ? "VICTORY! +15 TNV" : "GAME OVER! +10 TNV");
                 location.reload();
-            }, 1200);
+            }, 1500);
         }
     </script>
 </body>
