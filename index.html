@@ -3,90 +3,98 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>TNV Duel Arena | Final</title>
+    <title>TNV Duel Arena | Final Version</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js"></script>
     <style>
         :root { --tnv-green: #00ff88; }
         body { background: #121212; color: white; font-family: 'Segoe UI', sans-serif; text-align: center; margin: 0; overflow-x: hidden; }
-        .header { padding: 20px; background: #1e1e1e; border-bottom: 2px solid var(--tnv-green); }
-        .stats-box { display: flex; justify-content: space-around; padding: 15px; background: #222; margin: 10px; border-radius: 12px; border: 1px solid #333; }
+        .header { padding: 20px; background: #1e1e1e; border-bottom: 2px solid var(--tnv-green); box-shadow: 0 4px 20px rgba(0,0,0,0.5); }
+        .stats-box { display: flex; justify-content: space-around; padding: 15px; background: #252525; margin: 15px; border-radius: 15px; border: 1px solid #333; }
         
-        /* 3D Dice */
-        .scene { width: 100px; height: 100px; margin: 40px auto; perspective: 400px; cursor: pointer; }
-        .cube { width: 100%; height: 100%; position: relative; transform-style: preserve-3d; transition: transform 0.2s; }
-        .cube__face { position: absolute; width: 100px; height: 100px; border: 2px solid #333; line-height: 100px; font-size: 40px; background: white; color: black; border-radius: 10px; font-weight: bold; display: flex; justify-content: center; align-items: center; }
-        .front  { transform: rotateY(  0deg) translateZ(50px); } .back   { transform: rotateY(180deg) translateZ(50px); }
-        .right  { transform: rotateY( 90deg) translateZ(50px); } .left   { transform: rotateY(-90deg) translateZ(50px); }
-        .top    { transform: rotateX( 90deg) translateZ(50px); } .bottom { transform: rotateX(-90deg) translateZ(50px); }
+        /* 3D Dice Animation */
+        .scene { width: 100px; height: 100px; margin: 50px auto; perspective: 600px; cursor: pointer; }
+        .cube { width: 100%; height: 100%; position: relative; transform-style: preserve-3d; transition: transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
+        .cube__face { position: absolute; width: 100px; height: 100px; border: 2px solid #333; line-height: 100px; font-size: 45px; background: white; color: black; border-radius: 12px; font-weight: bold; display: flex; justify-content: center; align-items: center; box-shadow: inset 0 0 15px rgba(0,0,0,0.1); }
+        
+        .front  { transform: rotateY(  0deg) translateZ(50px); }
+        .back   { transform: rotateY(180deg) translateZ(50px); }
+        .right  { transform: rotateY( 90deg) translateZ(50px); }
+        .left   { transform: rotateY(-90deg) translateZ(50px); }
+        .top    { transform: rotateX( 90deg) translateZ(50px); }
+        .bottom { transform: rotateX(-90deg) translateZ(50px); }
 
-        .btn { background: var(--tnv-green); color: black; border: none; padding: 18px 30px; font-size: 18px; border-radius: 12px; font-weight: bold; cursor: pointer; width: 85%; transition: 0.3s; box-shadow: 0 4px 15px rgba(0,255,136,0.2); }
-        .btn:disabled { background: #444; color: #888; cursor: not-allowed; }
-        #status-msg { color: var(--tnv-green); margin: 15px; font-size: 14px; min-height: 20px; }
-        .progress-bar { width: 80%; height: 10px; background: #333; margin: 10px auto; border-radius: 5px; }
-        .progress-fill { height: 100%; background: var(--tnv-green); width: 0%; transition: 0.5s; box-shadow: 0 0 10px var(--tnv-green); }
+        .btn { background: var(--tnv-green); color: black; border: none; padding: 20px 40px; font-size: 20px; border-radius: 15px; font-weight: bold; cursor: pointer; width: 85%; transition: 0.3s; margin-top: 20px; box-shadow: 0 5px 15px rgba(0,255,136,0.3); }
+        .btn:disabled { background: #444; color: #888; cursor: not-allowed; box-shadow: none; }
+        
+        #status-msg { color: var(--tnv-green); margin-top: 20px; font-weight: 500; min-height: 24px; text-transform: uppercase; letter-spacing: 1px; }
+        .progress-bar { width: 85%; height: 12px; background: #333; margin: 15px auto; border-radius: 6px; border: 1px solid #444; }
+        .progress-fill { height: 100%; background: var(--tnv-green); width: 0%; transition: 0.8s ease-in-out; box-shadow: 0 0 15px var(--tnv-green); }
+        
+        @keyframes pulse { 0% { transform: scale(1); } 50% { transform: scale(1.05); } 100% { transform: scale(1); } }
+        .active-dice { animation: pulse 0.5s infinite; }
     </style>
 </head>
 <body>
 
     <div class="header">
         <h1>TNV Duel Arena 🎲</h1>
-        <div id="tnv-display">TNV Balance: 0 / 500</div>
+        <div id="tnv-display" style="font-weight: bold; margin-bottom: 5px;">Airdrop Balance: 0 / 500 TNV</div>
         <div class="progress-bar"><div id="p-fill" class="progress-fill"></div></div>
     </div>
 
-    <div id="setup-screen" style="padding: 60px 20px;">
-        <button class="btn" id="start-btn" onclick="initGame()">FIND MATCH (0.5 WLD)</button>
-        <p id="status-msg">Connect wallet to earn Airdrop</p>
+    <div id="setup-screen" style="padding: 80px 20px;">
+        <button class="btn" id="start-btn" onclick="initGame()">PLAY NOW (0.5 WLD)</button>
+        <p id="status-msg">Click to Join the Battle</p>
     </div>
 
     <div id="game-screen" style="display:none;">
         <div class="stats-box">
-            <div>ME: <span id="my-score">0</span></div>
-            <div id="timer" style="color: #ff4444; font-weight: bold; font-size: 26px;">30s</div>
-            <div>OPP: <span id="opp-score">0</span></div>
+            <div>ME: <span id="my-score" style="font-size: 24px; font-weight: bold; color: var(--tnv-green);">0</span></div>
+            <div id="timer" style="color: #ff4444; font-weight: bold; font-size: 32px;">30s</div>
+            <div>OPP: <span id="opp-score" style="font-size: 24px; font-weight: bold; color: #aaa;">0</span></div>
         </div>
 
-        <div class="scene" onclick="rollDice()">
+        <div class="scene" id="dice-scene" onclick="rollDice()">
             <div class="cube" id="dice-cube">
                 <div class="cube__face front">1</div><div class="cube__face back">6</div>
                 <div class="cube__face right">3</div><div class="cube__face left">4</div>
                 <div class="cube__face top">2</div><div class="cube__face bottom">5</div>
             </div>
         </div>
-        <p style="color: var(--tnv-green); font-weight: bold; animation: blink 1s infinite;">TAP THE DICE FAST!</p>
+        <p style="color: #888; font-size: 18px;">TAP THE DICE AS FAST AS YOU CAN!</p>
     </div>
 
     <script>
-        // --- CONFIGURATION ---
+        // Supabase Keys
         const SB_URL = "https://efmkazyrollcyvcwmewd.supabase.co";
         const SB_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVmbWthenlyeGxsY3l2Y3dtZXdkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg0ODYzMTMsImV4cCI6MjA5NDA2MjMxM30.PaKHyjZOkDCcyK0x7Qd1_DSSTS_ra5PYDuZwYIf5GyA";
         
+        // Single client instance
         const supabaseClient = supabase.createClient(SB_URL, SB_KEY);
 
-        let myAddress = null, matchId = null, isP1 = false, myScore = 0, gameActive = false, timeLeft = 30;
+        let myAddress, matchId, isP1, myScore = 0, gameActive = false, timeLeft = 30;
 
         async function initGame() {
-            console.log("Starting...");
-            const status = document.getElementById('status-msg');
+            const statusText = document.getElementById('status-msg');
             
-            // Check if wallet exists
+            // Wallet connection logic
             if (window.ethereum) {
                 try {
                     const provider = new ethers.providers.Web3Provider(window.ethereum);
                     const accounts = await provider.send("eth_requestAccounts", []);
                     myAddress = accounts[0];
                 } catch (e) {
-                    return alert("Wallet connection rejected.");
+                    return alert("Wallet connection rejected!");
                 }
             } else {
-                // Testing Mode for Chrome without MetaMask
-                let guestName = prompt("Wallet nahi mila. Testing ke liye apna naam daalein:");
-                if(!guestName) return;
-                myAddress = "GUEST_" + guestName.replace(/\s/g, '');
+                // Testing mode for browsers without wallet
+                let guest = prompt("Wallet nahi mila. Testing ke liye koi bhi naam daalein:");
+                if(!guest) return;
+                myAddress = "PLAYER_" + guest.trim().toUpperCase();
             }
 
-            status.innerText = "Searching for opponent...";
+            statusText.innerText = "Finding a Match...";
             document.getElementById('start-btn').disabled = true;
             
             loadRewards();
@@ -96,35 +104,47 @@
         async function loadRewards() {
             const { data } = await supabaseClient.from('user_rewards').select('tnv_balance').eq('wallet_address', myAddress).single();
             if(data) {
-                document.getElementById('tnv-display').innerText = `TNV Balance: ${data.tnv_balance} / 500`;
+                document.getElementById('tnv-display').innerText = `Airdrop Balance: ${data.tnv_balance} / 500 TNV`;
                 document.getElementById('p-fill').style.width = Math.min((data.tnv_balance / 500 * 100), 100) + "%";
             }
         }
 
         async function findMatch() {
-            // Check for waiting room
-            const { data: waitMatch } = await supabaseClient.from('matches')
+            // Find a room where status is waiting and player_2 is empty
+            const { data: rooms } = await supabaseClient
+                .from('matches')
                 .select('*')
                 .eq('status', 'waiting')
-                .neq('player_1', myAddress) // Don't match with self
-                .limit(1).single();
+                .is('player_2', null)
+                .neq('player_1', myAddress)
+                .limit(1);
 
-            if (waitMatch) {
-                matchId = waitMatch.id; isP1 = false;
+            if (rooms && rooms.length > 0) {
+                matchId = rooms[0].id; 
+                isP1 = false;
+                console.log("Joining as P2:", matchId);
                 await supabaseClient.from('matches').update({ player_2: myAddress, status: 'playing' }).eq('id', matchId);
             } else {
-                const { data: newM } = await supabaseClient.from('matches').insert([{ player_1: myAddress }]).select().single();
-                matchId = newM.id; isP1 = true;
+                console.log("Creating room as P1...");
+                const { data: newMatch } = await supabaseClient.from('matches')
+                    .insert([{ player_1: myAddress, status: 'waiting' }])
+                    .select().single();
+                matchId = newMatch.id; 
+                isP1 = true;
             }
             subscribeToMatch();
         }
 
         function subscribeToMatch() {
-            supabaseClient.channel(`m_${matchId}`).on('postgres_changes', { event:'UPDATE', schema:'public', table:'matches', filter:`id=eq.${matchId}` }, 
-            payload => {
+            supabaseClient.channel(`match_${matchId}`).on('postgres_changes', { 
+                event:'UPDATE', schema:'public', table:'matches', filter:`id=eq.${matchId}` 
+            }, payload => {
                 const d = payload.new;
                 document.getElementById('opp-score').innerText = isP1 ? d.p2_score : d.p1_score;
-                if(d.status === 'playing' && !gameActive) startGame();
+                
+                if(d.status === 'playing' && !gameActive) {
+                    startGame();
+                }
             }).subscribe();
         }
 
@@ -132,6 +152,7 @@
             document.getElementById('setup-screen').style.display = 'none';
             document.getElementById('game-screen').style.display = 'block';
             gameActive = true;
+            
             const timerInt = setInterval(() => {
                 timeLeft--; 
                 document.getElementById('timer').innerText = timeLeft + "s";
@@ -145,15 +166,19 @@
 
         function rollDice() {
             if(!gameActive) return;
+            
+            // 3D Rotation
             const cube = document.getElementById('dice-cube');
             const x = Math.floor(Math.random() * 4) * 90;
             const y = Math.floor(Math.random() * 4) * 90;
             cube.style.transform = `rotateX(${x}deg) rotateY(${y}deg)`;
 
+            // Score Logic
             const points = Math.floor(Math.random() * 6) + 1;
             myScore += points;
             document.getElementById('my-score').innerText = myScore;
             
+            // Sync to Database
             const update = isP1 ? { p1_score: myScore } : { p2_score: myScore };
             supabaseClient.from('matches').update(update).eq('id', matchId);
         }
@@ -162,15 +187,12 @@
             const { data: match } = await supabaseClient.from('matches').select('*').eq('id', matchId).single();
             const win = isP1 ? match.p1_score > match.p2_score : match.p2_score > match.p1_score;
             
-            // Call Supabase function
+            // Call Database Function to increment TNV
             await supabaseClient.rpc('increment_tnv', { player_wallet: myAddress, amount: win ? 15 : 10 });
             
             alert(win ? "VICTORY! You earned 15 TNV" : "DEFEAT! You earned 10 TNV");
             location.reload();
         }
     </script>
-    <style>
-        @keyframes blink { 0% {opacity: 1;} 50% {opacity: 0.4;} 100% {opacity: 1;} }
-    </style>
 </body>
 </html>
