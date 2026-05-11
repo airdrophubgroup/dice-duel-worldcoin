@@ -3,19 +3,22 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>TNV Duel Arena | Final Build</title>
+    <title>TNV Duel Arena | World App Sync</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js"></script>
     <style>
         :root { --tnv: #00ff88; --gold: #ffd700; }
-        body { background: #121212; color: white; font-family: 'Segoe UI', sans-serif; text-align: center; margin: 0; overflow-x: hidden; }
+        body { background: #121212; color: white; font-family: 'Segoe UI', sans-serif; text-align: center; margin: 0; overflow: hidden; }
         
+        /* TNV Coin Symbol */
         .tnv-token { display: inline-block; width: 18px; height: 18px; background: linear-gradient(145deg, #cd7f32, #ffd700); border-radius: 50%; border: 1px solid #ffd700; vertical-align: middle; box-shadow: 0 0 5px rgba(255,215,0,0.5); }
+
         .header { padding: 15px; background: #1e1e1e; border-bottom: 2px solid var(--tnv); }
         .tnv-container { display: flex; align-items: center; justify-content: center; margin-top: 8px; }
         .progress-bar { width: 60%; height: 8px; background: #333; border-radius: 4px; overflow: hidden; }
         .progress-fill { height: 100%; background: var(--tnv); width: 0%; transition: 0.5s; }
 
+        /* Leaderboard Design */
         .leaderboard-section { margin: 25px 10px; background: #1a1a1a; border-radius: 15px; border: 1px solid #333; overflow: hidden; }
         .lb-header { background: #252525; padding: 12px; color: var(--tnv); font-weight: bold; font-size: 16px; border-bottom: 1px solid #333; }
         .lb-table { width: 100%; border-collapse: collapse; font-size: 11px; }
@@ -23,6 +26,7 @@
         .lb-table td { padding: 12px 5px; border-bottom: 1px solid #222; }
         .rank-highlight { color: var(--gold); font-weight: bold; }
 
+        /* Gameplay Styles */
         .stats-box { display: flex; justify-content: space-around; padding: 15px; background: #252525; margin: 15px; border-radius: 15px; border: 1px solid #333; }
         .scene { width: 100px; height: 100px; margin: 40px auto; perspective: 600px; }
         .cube { width: 100%; height: 100%; position: relative; transform-style: preserve-3d; transition: transform 0.2s; cursor: pointer; }
@@ -33,6 +37,8 @@
         
         .btn { background: var(--tnv); color: black; border: none; padding: 18px 30px; font-size: 18px; border-radius: 12px; font-weight: bold; width: 85%; cursor: pointer; }
         .btn:disabled { background: #444; color: #888; }
+        
+        /* Overlays */
         #waiting-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #121212; z-index: 1000; display: none; flex-direction: column; align-items: center; justify-content: center; }
         .spinner { width: 50px; height: 50px; border: 5px solid #333; border-top: 5px solid var(--tnv); border-radius: 50%; animation: spin 1s linear infinite; margin-bottom: 20px; }
         @keyframes spin { 100% { transform: rotate(360deg); } }
@@ -42,7 +48,7 @@
 
     <div id="waiting-overlay">
         <div class="spinner"></div>
-        <h2 id="wait-status">SEARCHING...</h2>
+        <h2 id="wait-status">SEARCHING FOR OPPONENT...</h2>
         <p id="match-timer" style="font-size: 24px; color: var(--tnv);">60s</p>
     </div>
 
@@ -58,6 +64,7 @@
         <div style="padding: 20px;">
             <button class="btn" id="start-btn" onclick="initMatchmaking()">CONNECT WORLD WALLET</button>
         </div>
+
         <div class="leaderboard-section">
             <div class="lb-header">🏆 GLOBAL RANKINGS</div>
             <table class="lb-table">
@@ -89,8 +96,27 @@
 
         window.onload = async () => {
             loadLeaderboard();
-            checkConnection();
+            await checkConnection();
         };
+
+        // World App Wallet Detection with Retry Logic
+        async function checkConnection() {
+            for (let i = 0; i < 10; i++) {
+                if (window.ethereum) {
+                    try {
+                        const accounts = await window.ethereum.request({ method: 'eth_accounts' });
+                        if (accounts.length > 0) {
+                            myAddress = accounts[0];
+                            document.getElementById('start-btn').innerText = "PLAY NOW (0.5 WLD)";
+                            loadRewards();
+                            return true;
+                        }
+                    } catch (err) { console.error(err); }
+                }
+                await new Promise(r => setTimeout(r, 500));
+            }
+            return false;
+        }
 
         async function loadLeaderboard() {
             const { data } = await supabaseClient.from('user_rewards').select('wallet_address, tnv_balance, games_played, games_won').order('tnv_balance', { ascending: false }).limit(10);
@@ -107,17 +133,6 @@
             }
         }
 
-        async function checkConnection() {
-            if (window.ethereum) {
-                const accounts = await window.ethereum.request({ method: 'eth_accounts' });
-                if (accounts.length > 0) {
-                    myAddress = accounts[0];
-                    document.getElementById('start-btn').innerText = "PLAY NOW (0.5 WLD)";
-                    loadRewards();
-                }
-            }
-        }
-
         async function loadRewards() {
             const { data } = await supabaseClient.from('user_rewards').select('tnv_balance').eq('wallet_address', myAddress).single();
             if(data) {
@@ -127,13 +142,16 @@
         }
 
         async function initMatchmaking() {
-            if (!myAddress) {
+            const isConnected = await checkConnection();
+            if (!isConnected) {
                 if (window.ethereum) {
-                    const accs = await window.ethereum.request({ method: 'eth_requestAccounts' });
-                    myAddress = accs[0];
-                    checkConnection();
-                    return;
-                } else { alert("Open in World App!"); return; }
+                    try {
+                        const accs = await window.ethereum.request({ method: 'eth_requestAccounts' });
+                        myAddress = accs[0];
+                        document.getElementById('start-btn').innerText = "PLAY NOW (0.5 WLD)";
+                        loadRewards();
+                    } catch (e) { alert("Please approve wallet connection!"); return; }
+                } else { alert("Open this game inside World App!"); return; }
             }
 
             if (matchmakingActive) return;
