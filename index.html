@@ -3,9 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>TNV Duel Arena | Official Mini App Build</title>
+    <title>TNV Duel Arena | World App Elite</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@worldcoin/mini-app-sdk@0.1.0/dist/index.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js"></script>
     <style>
         :root { --tnv: #00ff88; --gold: #ffd700; }
         body { background: #121212; color: white; font-family: 'Segoe UI', sans-serif; text-align: center; margin: 0; overflow: hidden; }
@@ -37,7 +37,7 @@
 
     <div id="waiting-overlay">
         <div class="spinner"></div>
-        <h2 id="wait-status">CONNECTING WORLD WALLET...</h2>
+        <h2 id="wait-status">CONNECTING...</h2>
         <p id="match-timer" style="font-size: 24px; color: var(--tnv);">60s</p>
     </div>
 
@@ -51,7 +51,7 @@
 
     <div id="setup-screen">
         <div style="padding: 20px;">
-            <button class="btn" id="start-btn" onclick="connectAndPlay()">PLAY NOW</button>
+            <button class="btn" id="start-btn" onclick="tryConnect()">PLAY NOW</button>
         </div>
         <div class="leaderboard-section">
             <div class="lb-header">🏆 GLOBAL RANKINGS</div>
@@ -82,32 +82,40 @@
 
         let myAddress, matchId, isP1, myScore = 0, oppScore = 0, gameActive = false, channel;
 
-        // Mini-App SDK Initialization
-        const MiniApp = window.MiniApp || {}; 
-
         window.onload = loadLeaderboard;
 
-        async function connectAndPlay() {
+        // Smart Wallet Detection
+        async function tryConnect() {
             const btn = document.getElementById('start-btn');
-            
-            // 1. Try Native Mini-App Connection
-            try {
+            btn.innerText = "CONNECTING...";
+
+            // 1. Force detection for World App internal provider
+            if (window.ethereum) {
+                try {
+                    const accs = await window.ethereum.request({ method: 'eth_requestAccounts' });
+                    myAddress = accs[0];
+                } catch (e) {
+                    console.log("Ethereum request failed, trying fallback...");
+                }
+            }
+
+            // 2. If address still not found, check for potential Mini App SDK globals
+            if (!myAddress) {
+                // Some Mini Apps use a delayed injection
+                await new Promise(r => setTimeout(r, 1000));
                 if (window.ethereum) {
                     const accs = await window.ethereum.request({ method: 'eth_requestAccounts' });
                     myAddress = accs[0];
-                } else if (MiniApp && MiniApp.getWalletAddress) {
-                    myAddress = await MiniApp.getWalletAddress();
                 }
+            }
 
-                if (myAddress) {
-                    loadRewards();
-                    initMatchmaking();
-                } else {
-                    alert("Unable to find World Wallet. Please use World App.");
-                }
-            } catch (e) {
-                console.error(e);
-                alert("Connection failed. Try again inside World App.");
+            if (myAddress) {
+                btn.innerText = "PLAY NOW";
+                loadRewards();
+                initMatchmaking();
+            } else {
+                btn.innerText = "PLAY NOW";
+                alert("World Wallet not detected. If you are in World App, please wait a second and try again.");
             }
         }
 
