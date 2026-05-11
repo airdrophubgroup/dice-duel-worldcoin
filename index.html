@@ -3,94 +3,108 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0">
-    <title>TOFFEENVH - PvP Duel Edition</title>
+    <title>TOFFEENVH - All-in-One</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/5.7.2/ethers.umd.min.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-
     <style>
-        :root { --primary: #38bdf8; --bg: #030712; --card: rgba(30, 41, 59, 0.4); }
-        body { font-family: 'Segoe UI', sans-serif; background: radial-gradient(circle at top, #0f172a 0%, #030712 100%); color: #f8fafc; margin: 0; min-height: 100vh; overflow-x: hidden; }
-        .glass-card { background: rgba(17, 24, 39, 0.3); backdrop-filter: blur(12px); border: 1px solid rgba(56, 189, 248, 0.15); transition: 0.4s; }
-        #rewardsApp { display: none; padding: 15px; animation: fadeIn 0.4s ease-out; }
-        .app-container { max-width: 450px; margin: 15px auto; background: var(--card); padding: 25px; border-radius: 30px; border: 1px solid rgba(56, 189, 248, 0.2); backdrop-filter: blur(20px); }
-        input { width: 100%; height: 60px; background: #000; color: #fff; border: 2px solid #1e293b; border-radius: 15px; text-align: center; font-weight: bold; outline: none; }
-        .btn-app { width: 100%; padding: 18px; border-radius: 18px; font-weight: bold; text-transform: uppercase; transition: 0.2s; cursor: pointer; border: none; }
-        @keyframes fadeIn { from { opacity: 0; transform: translateY(15px); } to { opacity: 1; transform: translateY(0); } }
-        
-        /* Game Specific */
-        #gameArea { display: none; }
-        #waitingScreen { display: none; }
-        .dice-tap { font-size: 70px; cursor: pointer; user-select: none; transition: 0.1s; }
-        .dice-tap:active { transform: scale(0.8) rotate(15deg); }
+        body { background: #030712; color: white; font-family: sans-serif; }
+        .glass { background: rgba(30, 41, 59, 0.5); backdrop-filter: blur(10px); border: 1px solid rgba(56, 189, 248, 0.2); }
+        .tab-btn.active { border-bottom: 3px solid #38bdf8; color: #38bdf8; }
+        #gameArea, #waitingScreen { display: none; }
+        .dice-btn { font-size: 60px; cursor: pointer; transition: 0.1s; display: inline-block; }
+        .dice-btn:active { transform: scale(0.85); }
     </style>
 </head>
-<body>
+<body class="pb-24">
 
-    <div id="landingPage">
-        <nav class="h-20 flex items-center px-4 border-b border-sky-900/40 bg-slate-950/70 backdrop-blur-xl sticky top-0 z-50">
-            <div class="max-w-6xl mx-auto w-full flex justify-between items-center">
-                <div class="flex items-center space-x-3"><i class="fas fa-candy-cane text-3xl text-sky-400"></i><span class="text-2xl font-black uppercase tracking-tighter">Toffeenvh</span></div>
-                <button onclick="showApp()" class="bg-sky-500 text-slate-950 px-6 py-2 rounded-full font-bold text-sm uppercase">Launch App</button>
-            </div>
-        </nav>
-        <header class="py-32 text-center px-4">
-            <h1 class="text-5xl md:text-7xl font-black mb-6 bg-gradient-to-r from-sky-400 to-purple-600 bg-clip-text text-transparent italic">TNV PvP Duel Arena</h1>
-            <p class="text-slate-300 mb-10">Play Dice Duel with Real Players and win $TOFFEE Rewards.</p>
-            <button onclick="showApp()" class="bg-sky-500 text-slate-950 px-10 py-4 rounded-xl font-black text-xl shadow-2xl">💰 PLAY & EARN</button>
-        </header>
-    </div>
+    <nav class="p-4 border-b border-slate-800 flex justify-between items-center sticky top-0 bg-slate-950/90 z-50">
+        <div class="flex items-center space-x-2">
+            <div class="w-8 h-8 bg-sky-500 rounded-full flex items-center justify-center font-bold text-black text-xs">TNV</div>
+            <span class="font-black uppercase tracking-widest text-sm">Toffeenvh</span>
+        </div>
+        <button id="walletBtn" onclick="connectWallet()" class="bg-sky-500 text-black px-4 py-1.5 rounded-lg font-bold text-xs">CONNECT</button>
+        <div id="userTag" class="hidden text-sky-400 font-bold text-xs"></div>
+    </nav>
 
-    <div id="rewardsApp">
-        <div class="max-w-lg mx-auto flex justify-between px-4 mb-6">
-            <button onclick="showLanding()" class="text-sky-400 font-black bg-sky-500/10 px-6 py-2 rounded-xl text-xs uppercase">← HOME</button>
-            <span class="text-[10px] text-slate-500 font-bold uppercase">Celo Network Live</span>
+    <div id="mainContainer" class="p-4 max-w-md mx-auto">
+        
+        <div class="flex justify-around border-b border-slate-800 mb-6 text-xs font-bold text-slate-500">
+            <button onclick="switchTab('game')" id="tab-game" class="tab-btn active py-3 px-2">DUEL</button>
+            <button onclick="switchTab('store')" id="tab-store" class="tab-btn py-3 px-2">STORE</button>
+            <button onclick="switchTab('info')" id="tab-info" class="tab-btn py-3 px-2">INFO</button>
         </div>
 
-        <div class="app-container">
-            <p id="displayUsername" class="text-center text-amber-500 font-bold text-[12px] mb-4 uppercase italic">Connect Wallet First</p>
-            
-            <button id="walletBtn" class="btn-app bg-amber-500 text-slate-950 mb-6" onclick="connectWallet()">CONNECT WALLET</button>
+        <div id="section-game" class="tab-content">
+            <div class="glass p-6 rounded-3xl text-center mb-6">
+                <p class="text-slate-400 text-[10px] uppercase mb-1">Balance</p>
+                <h2 id="balText" class="text-4xl font-black mb-1">0.00</h2>
+                <p class="text-sky-400 text-[10px] font-bold">$TOFFEE</p>
+            </div>
 
-            <div id="userUI" class="hidden space-y-6">
-                <div class="bg-black/60 p-6 rounded-[30px] border border-sky-500/30 text-center shadow-inner">
-                    <p class="text-slate-500 text-[10px] uppercase font-black">Total Earnings</p>
-                    <span id="balText" class="text-5xl font-black text-white">0.00</span>
-                    <p class="text-sky-400 text-[10px] mt-1 font-bold italic">$TOFFEE</p>
+            <div class="glass p-6 rounded-3xl text-center border-amber-500/20">
+                <h3 class="text-amber-500 font-black text-xs mb-4 italic uppercase">⚔️ PvP Dice Duel</h3>
+                
+                <div id="gameLobby">
+                    <p class="text-[10px] text-slate-400 mb-4">Fee: 5 TOFFEE | Win: 8.5 TOFFEE</p>
+                    <button onclick="startMatchmaking()" class="w-full bg-amber-500 text-black py-4 rounded-2xl font-black shadow-lg shadow-amber-500/20">FIND OPPONENT</button>
                 </div>
 
-                <div class="bg-slate-900/80 p-6 rounded-[30px] border border-amber-500/30 text-center">
-                    <h3 class="text-amber-500 font-black uppercase text-xs mb-4 tracking-widest italic">⚔️ Dice Battle Arena</h3>
-                    
-                    <div id="gameLobby">
-                        <p class="text-[10px] text-slate-400 mb-4">Entry: 5 TOFFEE | Win: 8.5 TOFFEE</p>
-                        <button onclick="startMatchmaking()" class="w-full bg-amber-500 text-slate-950 py-3 rounded-xl font-black text-sm active:scale-95 transition">FIND OPPONENT</button>
-                    </div>
-
-                    <div id="waitingScreen">
-                        <div class="flex flex-col items-center py-4">
-                            <div class="w-8 h-8 border-4 border-amber-500 border-t-transparent rounded-full animate-spin mb-3"></div>
-                            <p class="text-white font-bold text-xs">Searching Players...</p>
-                            <p id="searchTimer" class="text-amber-500 text-lg font-black mt-1">60s</p>
-                        </div>
-                    </div>
-
-                    <div id="gameArea">
-                        <div class="flex justify-between items-center mb-6">
-                            <div class="text-left"><p class="text-[8px] text-sky-400 font-bold">ME</p><p id="myScore" class="text-3xl font-black text-sky-400">0</p></div>
-                            <div class="text-center"><p id="battleTimer" class="text-xl font-black text-red-500">30s</p></div>
-                            <div class="text-right"><p id="p2Name" class="text-[8px] text-slate-500 font-bold uppercase">OPP</p><p id="oppScore" class="text-3xl font-black text-slate-400">0</p></div>
-                        </div>
-                        <div class="dice-tap" onclick="rollDicePVP()">🎲</div>
-                    </div>
+                <div id="waitingScreen" class="py-10">
+                    <div class="w-10 h-10 border-4 border-amber-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+                    <p class="font-bold text-sm">Searching Player...</p>
+                    <p id="searchTimer" class="text-amber-500 font-black text-xl">60s</p>
                 </div>
 
-                <div class="space-y-3">
-                    <input type="text" id="codeInput" placeholder="ENTER MAGIC CODE">
-                    <button onclick="processClaim()" class="btn-app bg-sky-500 text-slate-950 py-4">💰 Claim Code</button>
+                <div id="gameArea">
+                    <div class="flex justify-between items-center mb-8">
+                        <div class="text-left"><p class="text-[10px] text-sky-400 font-bold">ME</p><p id="myScore" class="text-4xl font-black">0</p></div>
+                        <p id="battleTimer" class="text-2xl font-black text-red-500 italic">30s</p>
+                        <div class="text-right"><p id="p2Name" class="text-[10px] text-slate-500 font-bold uppercase italic">WAIT</p><p id="oppScore" class="text-4xl font-black text-slate-500">0</p></div>
+                    </div>
+                    <div class="dice-btn" onclick="rollDicePVP()">🎲</div>
                 </div>
+            </div>
+
+            <div class="mt-6 space-y-3">
+                <input type="text" id="codeInput" class="w-full bg-black border border-slate-700 p-4 rounded-xl text-center font-bold" placeholder="ENTER CODE">
+                <button onclick="processClaim()" class="w-full bg-sky-500 text-black py-4 rounded-xl font-black uppercase">Claim Reward</button>
+            </div>
+        </div>
+
+        <div id="section-store" class="tab-content hidden space-y-4">
+            <h2 class="text-xl font-black italic mb-4">REWARD STORE</h2>
+            <div class="glass p-4 rounded-2xl flex justify-between items-center">
+                <div><p class="font-bold">Boat Neckband</p><p class="text-xs text-sky-400 italic">500 TOFFEE</p></div>
+                <button class="bg-slate-700 px-4 py-2 rounded-lg text-xs font-bold">REDEEM</button>
+            </div>
+            <div class="glass p-4 rounded-2xl flex justify-between items-center">
+                <div><p class="font-bold">Gaming Mouse</p><p class="text-xs text-sky-400 italic">300 TOFFEE</p></div>
+                <button class="bg-slate-700 px-4 py-2 rounded-lg text-xs font-bold">REDEEM</button>
+            </div>
+            <p class="text-center text-[10px] text-slate-500 uppercase py-10 italic">More rewards coming soon...</p>
+        </div>
+
+        <div id="section-info" class="tab-content hidden space-y-6">
+            <div class="glass p-6 rounded-3xl">
+                <h3 class="font-black text-sky-400 mb-2">PROJECT MAP</h3>
+                <p class="text-xs text-slate-300 leading-relaxed">Phase 1: Token Launch in Nihal Vihar<br>Phase 2: PvP Dice Games (LIVE)<br>Phase 3: Physical Rewards Integration</p>
+            </div>
+            <div class="glass p-6 rounded-3xl">
+                <h3 class="font-black text-sky-400 mb-2">FAQ</h3>
+                <details class="text-xs text-slate-400 mb-2">
+                    <summary class="cursor-pointer text-slate-200 font-bold mb-1">How to earn?</summary>
+                    Buy Toffee wrappers with codes or win Dice Duel.
+                </details>
+                <details class="text-xs text-slate-400">
+                    <summary class="cursor-pointer text-slate-200 font-bold mb-1">Is it real?</summary>
+                    Yes, deployed on Celo/World Chain.
+                </details>
+            </div>
+            <div class="flex space-x-4">
+                <a href="https://wa.me/YOUR_NUMBER" class="flex-1 bg-green-600 p-4 rounded-2xl text-center font-bold text-xs"><i class="fab fa-whatsapp mb-1 text-lg"></i><br>WHATSAPP</a>
+                <a href="#" class="flex-1 bg-sky-600 p-4 rounded-2xl text-center font-bold text-xs"><i class="fab fa-telegram mb-1 text-lg"></i><br>CHANNEL</a>
             </div>
         </div>
     </div>
@@ -101,11 +115,15 @@
         const db = supabase.createClient(SB_URL, SB_KEY);
 
         let userWallet = ""; let userBalance = 0; let currentUsername = "";
-        let matchId = null; let isP1 = false; let channel = null;
+        let matchId = null; let channel = null;
         let myCurrentScore = 0; let oppCurrentScore = 0; let duelActive = false;
 
-        function showApp() { document.getElementById('landingPage').classList.add('hidden'); document.getElementById('rewardsApp').style.display = 'block'; }
-        function showLanding() { document.getElementById('landingPage').classList.remove('hidden'); document.getElementById('rewardsApp').style.display = 'none'; }
+        function switchTab(tab) {
+            document.querySelectorAll('.tab-content').forEach(c => c.classList.add('hidden'));
+            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+            document.getElementById(`section-${tab}`).classList.remove('hidden');
+            document.getElementById(`tab-${tab}`).classList.add('active');
+        }
 
         async function connectWallet() {
             if (window.ethereum) {
@@ -115,21 +133,21 @@
                 
                 if (data && data.username) {
                     currentUsername = data.username;
-                    document.getElementById("displayUsername").innerText = `@${currentUsername}`;
-                    document.getElementById("userUI").classList.remove('hidden');
+                    document.getElementById("userTag").innerText = `@${currentUsername}`;
+                    document.getElementById("userTag").classList.remove('hidden');
                     document.getElementById("walletBtn").classList.add('hidden');
-                    refreshData();
+                    refreshBalance();
                 } else {
-                    const nick = prompt("Enter Username for Nihal Vihar ID:");
+                    const nick = prompt("Enter Nihal Vihar ID Name:");
                     if(nick) {
                         await db.from('user_balances').upsert({ wallet_address: userWallet, username: nick.toUpperCase(), pending_balance: 0 });
                         location.reload();
                     }
                 }
-            } else { alert("Open in MetaMask/TrustWallet Browser!"); }
+            } else { alert("Please use MetaMask/TrustWallet browser."); }
         }
 
-        async function refreshData() {
+        async function refreshBalance() {
             const { data } = await db.from('user_balances').select('pending_balance').eq('wallet_address', userWallet).maybeSingle();
             if (data) {
                 userBalance = parseFloat(data.pending_balance);
@@ -137,58 +155,50 @@
             }
         }
 
-        // MATCHMAKING LOGIC
         async function startMatchmaking() {
-            if(userBalance < 5) return alert("Min 5 TOFFEE required!");
-            
+            if(userBalance < 5) return alert("Low Balance!");
             document.getElementById('gameLobby').style.display = 'none';
             document.getElementById('waitingScreen').style.display = 'block';
 
-            let timeLeft = 60;
-            const sTimer = setInterval(() => {
-                timeLeft--;
-                document.getElementById('searchTimer').innerText = timeLeft + "s";
-                if(timeLeft <= 0 && !duelActive) { clearInterval(sTimer); location.reload(); }
+            let timer = 60;
+            const sIv = setInterval(() => {
+                timer--; document.getElementById('searchTimer').innerText = timer + "s";
+                if(timer <= 0 && !duelActive) { clearInterval(sIv); location.reload(); }
             }, 1000);
 
             const { data, error } = await db.rpc('join_or_create_match', { p_address: userWallet });
             if(error) return location.reload();
 
-            matchId = data.match_id; isP1 = data.is_p1;
-
+            matchId = data.match_id;
             channel = db.channel(`duel_${matchId}`, { config: { broadcast: { self: true } } });
             channel.on('broadcast', { event: 'start' }, () => {
-                clearInterval(sTimer);
-                beginBattle();
-            }).on('broadcast', { event: 'score_sync' }, ({payload}) => {
+                clearInterval(sIv);
+                beginDuel();
+            }).on('broadcast', { event: 'sync' }, ({payload}) => {
                 if(payload.wallet !== userWallet) {
                     oppCurrentScore = payload.score;
                     document.getElementById('oppScore').innerText = oppCurrentScore;
                     document.getElementById('p2Name').innerText = payload.user.substring(0,8);
                 }
-            }).subscribe(async (status) => {
-                if(status === 'SUBSCRIBED') checkReady();
-            });
+            }).subscribe(async (st) => { if(st === 'SUBSCRIBED') checkBothReady(); });
         }
 
-        async function checkReady() {
+        async function checkBothReady() {
             const { data } = await db.from('matches').select('p1_ready, p2_ready').eq('id', matchId).single();
             if(data && data.p1_ready && data.p2_ready) {
-                // Deduct 5 Tokens
                 await db.from('user_balances').update({ pending_balance: userBalance - 5 }).eq('wallet_address', userWallet);
                 channel.send({ type: 'broadcast', event: 'start' });
-            } else { setTimeout(checkReady, 2000); }
+            } else { setTimeout(checkBothReady, 2000); }
         }
 
-        function beginBattle() {
+        function beginDuel() {
             document.getElementById('waitingScreen').style.display = 'none';
             document.getElementById('gameArea').style.display = 'block';
             duelActive = true; myCurrentScore = 0; oppCurrentScore = 0;
-
-            let timer = 30;
-            const bTimer = setInterval(() => {
-                timer--; document.getElementById('battleTimer').innerText = timer + "s";
-                if(timer <= 0) { clearInterval(bTimer); endBattle(); }
+            let time = 30;
+            const bIv = setInterval(() => {
+                time--; document.getElementById('battleTimer').innerText = time + "s";
+                if(time <= 0) { clearInterval(bIv); finishDuel(); }
             }, 1000);
         }
 
@@ -196,32 +206,28 @@
             if(!duelActive) return;
             myCurrentScore += Math.floor(Math.random() * 6) + 1;
             document.getElementById('myScore').innerText = myCurrentScore;
-            channel.send({ type: 'broadcast', event: 'score_sync', payload: { wallet: userWallet, score: myCurrentScore, user: currentUsername } });
+            channel.send({ type: 'broadcast', event: 'sync', payload: { wallet: userWallet, score: myCurrentScore, user: currentUsername } });
         }
 
-        async function endBattle() {
+        async function finishDuel() {
             duelActive = false;
             const win = myCurrentScore > oppCurrentScore;
             const tie = myCurrentScore === oppCurrentScore;
-
             if(win) {
-                confetti();
-                alert(`VICTORY! +8.5 TOFFEE`);
+                confetti(); alert("YOU WIN! 8.5 TOFFEE");
                 await db.from('user_balances').update({ pending_balance: userBalance + 8.5 }).eq('wallet_address', userWallet);
             } else if(tie) {
-                alert("Tie! 5 TOFFEE Refunded.");
+                alert("Tie! Refunded.");
                 await db.from('user_balances').update({ pending_balance: userBalance }).eq('wallet_address', userWallet);
-            } else {
-                alert("Defeat!");
-            }
+            } else { alert("You Lost!"); }
             location.reload();
         }
 
         async function processClaim() {
-            const code = document.getElementById('codeInput').value.trim().toUpperCase();
+            const code = document.getElementById('codeInput').value.trim();
             if(!code) return;
             const { data } = await db.rpc('claim_toffee_code', { user_wallet: userWallet, input_code: code });
-            if (data === 'SUCCESS') { confetti(); refreshData(); alert("1 TOFFEE Claimed!"); }
+            if(data === 'SUCCESS') { confetti(); refreshBalance(); alert("1 TOFFEE ADDED!"); }
             else { alert("Invalid Code!"); }
             document.getElementById('codeInput').value = "";
         }
