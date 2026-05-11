@@ -3,27 +3,28 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>TNV Duel Arena</title>
+    <title>TNV Duel Arena | Dice Battle</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js"></script>
     <style>
         :root { --tnv-green: #00ff88; }
-        body { background: #121212; color: white; font-family: sans-serif; text-align: center; margin: 0; }
+        body { background: #121212; color: white; font-family: 'Segoe UI', sans-serif; text-align: center; margin: 0; }
         .header { padding: 20px; background: #1e1e1e; border-bottom: 2px solid var(--tnv-green); }
-        .stats-box { display: flex; justify-content: space-around; padding: 15px; background: #222; margin: 10px; border-radius: 10px; }
+        .stats-box { display: flex; justify-content: space-around; padding: 15px; background: #222; margin: 10px; border-radius: 10px; border: 1px solid #333; }
         
-        /* 3D Dice */
+        /* 3D Dice Styling */
         .scene { width: 100px; height: 100px; margin: 40px auto; perspective: 400px; cursor: pointer; }
         .cube { width: 100%; height: 100%; position: relative; transform-style: preserve-3d; transition: transform 0.2s; }
-        .cube__face { position: absolute; width: 100px; height: 100px; border: 2px solid #333; line-height: 100px; font-size: 40px; background: white; color: black; border-radius: 10px; font-weight: bold; }
-        .front { transform: rotateY(0deg) translateZ(50px); } .back { transform: rotateY(180deg) translateZ(50px); }
-        .right { transform: rotateY(90deg) translateZ(50px); } .left { transform: rotateY(-90deg) translateZ(50px); }
-        .top { transform: rotateX(90deg) translateZ(50px); } .bottom { transform: rotateX(-90deg) translateZ(50px); }
+        .cube__face { position: absolute; width: 100px; height: 100px; border: 2px solid #333; line-height: 100px; font-size: 40px; background: white; color: black; border-radius: 10px; font-weight: bold; display: flex; justify-content: center; align-items: center; }
+        .front  { transform: rotateY(  0deg) translateZ(50px); } .back   { transform: rotateY(180deg) translateZ(50px); }
+        .right  { transform: rotateY( 90deg) translateZ(50px); } .left   { transform: rotateY(-90deg) translateZ(50px); }
+        .top    { transform: rotateX( 90deg) translateZ(50px); } .bottom { transform: rotateX(-90deg) translateZ(50px); }
 
-        .btn { background: var(--tnv-green); color: black; border: none; padding: 15px 30px; font-size: 18px; border-radius: 10px; font-weight: bold; cursor: pointer; width: 80%; }
-        #status-msg { color: var(--tnv-green); margin: 10px; font-size: 14px; }
-        .progress-bar { width: 80%; height: 10px; background: #333; margin: 10px auto; border-radius: 5px; overflow: hidden; }
-        .progress-fill { height: 100%; background: var(--tnv-green); width: 0%; transition: 0.5s; }
+        .btn { background: var(--tnv-green); color: black; border: none; padding: 18px 30px; font-size: 18px; border-radius: 12px; font-weight: bold; cursor: pointer; width: 85%; transition: 0.3s; }
+        .btn:disabled { background: #444; color: #888; }
+        #status-msg { color: var(--tnv-green); margin: 15px; font-size: 14px; min-height: 20px; }
+        .progress-bar { width: 80%; height: 10px; background: #333; margin: 10px auto; border-radius: 5px; }
+        .progress-fill { height: 100%; background: var(--tnv-green); width: 0%; transition: 0.5s; box-shadow: 0 0 10px var(--tnv-green); }
     </style>
 </head>
 <body>
@@ -34,16 +35,16 @@
         <div class="progress-bar"><div id="p-fill" class="progress-fill"></div></div>
     </div>
 
-    <div id="setup-screen" style="padding: 50px 20px;">
+    <div id="setup-screen" style="padding: 60px 20px;">
         <button class="btn" id="start-btn" onclick="initGame()">FIND MATCH (0.5 WLD)</button>
-        <p id="status-msg">Connect wallet to play and earn TNV</p>
+        <p id="status-msg">Connect your wallet to earn Airdrop</p>
     </div>
 
     <div id="game-screen" style="display:none;">
         <div class="stats-box">
             <div>ME: <span id="my-score">0</span></div>
             <div id="timer" style="color: #ff4444; font-weight: bold; font-size: 24px;">30s</div>
-            <div>OPPONENT: <span id="opp-score">0</span></div>
+            <div>OPP: <span id="opp-score">0</span></div>
         </div>
 
         <div class="scene" onclick="rollDice()">
@@ -53,52 +54,64 @@
                 <div class="cube__face top">2</div><div class="cube__face bottom">5</div>
             </div>
         </div>
-        <p>TAP DICE TO ROLL!</p>
+        <p style="color: #888;">TAP DICE REPEATEDLY!</p>
     </div>
 
     <script>
+        // Supabase Configuration
         const SB_URL = "https://efmkazyrollcyvcwmewd.supabase.co";
         const SB_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVmbWthenlyeGxsY3l2Y3dtZXdkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg0ODYzMTMsImV4cCI6MjA5NDA2MjMxM30.PaKHyjZOkDCcyK0x7Qd1_DSSTS_ra5PYDuZwYIf5GyA";
-        const supabase = supabase.createClient(SB_URL, SB_KEY);
+        
+        // Client initialization (ONLY ONCE)
+        const supabaseClient = supabase.createClient(SB_URL, SB_KEY);
 
         let myAddress, matchId, isP1, myScore = 0, gameActive = false, timeLeft = 30;
 
         async function initGame() {
-            if(!window.ethereum) return alert("Please open in World App or use a Web3 Browser");
-            const provider = new ethers.providers.Web3Provider(window.ethereum);
-            const accounts = await provider.send("eth_requestAccounts", []);
-            myAddress = accounts[0];
+            console.log("Initializing Game...");
+            if(!window.ethereum) return alert("Wallet not found! Please open in World App or OKX Browser.");
             
-            document.getElementById('status-msg').innerText = "Matching with opponent...";
-            document.getElementById('start-btn').disabled = true;
-            
-            loadRewards();
-            findMatch();
+            try {
+                const provider = new ethers.providers.Web3Provider(window.ethereum);
+                const accounts = await provider.send("eth_requestAccounts", []);
+                myAddress = accounts[0];
+                
+                document.getElementById('status-msg').innerText = "Matching you with an opponent...";
+                document.getElementById('start-btn').disabled = true;
+                
+                loadRewards();
+                findMatch();
+            } catch (err) {
+                console.error(err);
+                alert("Connection failed!");
+                document.getElementById('start-btn').disabled = false;
+            }
         }
 
         async function loadRewards() {
-            const { data } = await supabase.from('user_rewards').select('tnv_balance').eq('wallet_address', myAddress).single();
+            const { data } = await supabaseClient.from('user_rewards').select('tnv_balance').eq('wallet_address', myAddress).single();
             if(data) {
                 document.getElementById('tnv-display').innerText = `TNV Balance: ${data.tnv_balance} / 500`;
-                document.getElementById('p-fill').style.width = (data.tnv_balance / 500 * 100) + "%";
+                document.getElementById('p-fill').style.width = Math.min((data.tnv_balance / 500 * 100), 100) + "%";
             }
         }
 
         async function findMatch() {
-            const { data: waitMatch } = await supabase.from('matches').select('*').eq('status', 'waiting').limit(1).single();
+            // Check for waiting players
+            const { data: waitMatch } = await supabaseClient.from('matches').select('*').eq('status', 'waiting').limit(1).single();
 
             if (waitMatch && waitMatch.player_1 !== myAddress) {
                 matchId = waitMatch.id; isP1 = false;
-                await supabase.from('matches').update({ player_2: myAddress, status: 'playing' }).eq('id', matchId);
+                await supabaseClient.from('matches').update({ player_2: myAddress, status: 'playing' }).eq('id', matchId);
             } else {
-                const { data: newM } = await supabase.from('matches').insert([{ player_1: myAddress }]).select().single();
+                const { data: newM } = await supabaseClient.from('matches').insert([{ player_1: myAddress }]).select().single();
                 matchId = newM.id; isP1 = true;
             }
             subscribeToMatch();
         }
 
         function subscribeToMatch() {
-            supabase.channel(`m_${matchId}`).on('postgres_changes', { event:'UPDATE', schema:'public', table:'matches', filter:`id=eq.${matchId}` }, 
+            supabaseClient.channel(`m_${matchId}`).on('postgres_changes', { event:'UPDATE', schema:'public', table:'matches', filter:`id=eq.${matchId}` }, 
             payload => {
                 const d = payload.new;
                 document.getElementById('opp-score').innerText = isP1 ? d.p2_score : d.p1_score;
@@ -128,16 +141,16 @@
             document.getElementById('my-score').innerText = myScore;
             
             const update = isP1 ? { p1_score: myScore } : { p2_score: myScore };
-            supabase.from('matches').update(update).eq('id', matchId);
+            supabaseClient.from('matches').update(update).eq('id', matchId);
         }
 
         async function endGame() {
             gameActive = false;
-            const { data: match } = await supabase.from('matches').select('*').eq('id', matchId).single();
+            const { data: match } = await supabaseClient.from('matches').select('*').eq('id', matchId).single();
             const win = isP1 ? match.p1_score > match.p2_score : match.p2_score > match.p1_score;
             
-            await supabase.rpc('increment_tnv', { player_wallet: myAddress, amount: win ? 15 : 10 });
-            alert(win ? "YOU WON! +15 TNV" : "YOU LOST! +10 TNV");
+            await supabaseClient.rpc('increment_tnv', { player_wallet: myAddress, amount: win ? 15 : 10 });
+            alert(win ? "VICTORY! You earned 15 TNV" : "DEFEAT! You earned 10 TNV");
             location.reload();
         }
     </script>
