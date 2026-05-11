@@ -3,24 +3,26 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>TNV Duel Arena | World App Edition</title>
+    <title>TNV Duel Arena | World App Sync</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js"></script>
-    <script src="https://unpkg.com/@worldcoin/idkit"></script>
     <style>
         :root { --tnv: #00ff88; --gold: #ffd700; }
         body { background: #121212; color: white; font-family: 'Segoe UI', sans-serif; text-align: center; margin: 0; overflow-x: hidden; }
         
-        .tnv-token { display: inline-block; width: 18px; height: 18px; background: linear-gradient(145deg, #cd7f32, #ffd700); border-radius: 50%; border: 1px solid #ffd700; vertical-align: middle; }
+        .tnv-token { display: inline-block; width: 18px; height: 18px; background: linear-gradient(145deg, #cd7f32, #ffd700); border-radius: 50%; border: 1px solid #ffd700; vertical-align: middle; box-shadow: 0 0 5px rgba(255,215,0,0.5); }
         .header { padding: 15px; background: #1e1e1e; border-bottom: 2px solid var(--tnv); }
         .tnv-container { display: flex; align-items: center; justify-content: center; margin-top: 8px; }
         .progress-bar { width: 60%; height: 8px; background: #333; border-radius: 4px; overflow: hidden; }
         .progress-fill { height: 100%; background: var(--tnv); width: 0%; transition: 0.5s; }
 
+        /* Leaderboard Fix */
         .leaderboard-section { margin: 25px 10px; background: #1a1a1a; border-radius: 15px; border: 1px solid #333; overflow: hidden; }
-        .lb-header { background: #252525; padding: 12px; color: var(--tnv); font-weight: bold; border-bottom: 1px solid #333; }
-        .lb-table { width: 100%; border-collapse: collapse; font-size: 12px; }
-        .lb-table td, .lb-table th { padding: 10px; border-bottom: 1px solid #222; }
+        .lb-header { background: #252525; padding: 12px; color: var(--tnv); font-weight: bold; font-size: 16px; border-bottom: 1px solid #333; }
+        .lb-table { width: 100%; border-collapse: collapse; font-size: 11px; }
+        .lb-table th { padding: 10px 5px; background: #222; color: #888; text-transform: uppercase; border-bottom: 1px solid #333; }
+        .lb-table td { padding: 12px 5px; border-bottom: 1px solid #222; }
+        .rank-highlight { color: var(--gold); font-weight: bold; }
 
         .stats-box { display: flex; justify-content: space-around; padding: 15px; background: #252525; margin: 15px; border-radius: 15px; border: 1px solid #333; }
         .scene { width: 100px; height: 100px; margin: 40px auto; perspective: 600px; }
@@ -41,7 +43,7 @@
 
     <div id="waiting-overlay">
         <div class="spinner"></div>
-        <h2 id="wait-status">CONNECTING WORLD WALLET...</h2>
+        <h2 id="wait-status">SEARCHING...</h2>
         <p id="match-timer" style="font-size: 24px; color: var(--tnv);">60s</p>
     </div>
 
@@ -61,8 +63,16 @@
         <div class="leaderboard-section">
             <div class="lb-header">🏆 GLOBAL RANKINGS</div>
             <table class="lb-table">
-                <thead><tr><th>Rank</th><th>Player</th><th>Played</th><th>Won</th><th>TNV</th></tr></thead>
-                <tbody id="leaderboard-body"><tr><td colspan="5">Loading...</td></tr></tbody>
+                <thead>
+                    <tr>
+                        <th>Rank</th>
+                        <th>Player</th>
+                        <th>P</th> <th>W</th> <th>TNV</th>
+                    </tr>
+                </thead>
+                <tbody id="leaderboard-body">
+                    <tr><td colspan="5">Loading Data...</td></tr>
+                </tbody>
             </table>
         </div>
     </div>
@@ -87,11 +97,30 @@
 
         let myAddress, matchId, isP1, myScore = 0, oppScore = 0, gameActive = false, matchmakingActive = false, channel;
 
-        // Auto-Check on Load
         window.onload = async () => {
             loadLeaderboard();
             checkConnection();
         };
+
+        async function loadLeaderboard() {
+            const { data, error } = await supabaseClient
+                .from('user_rewards')
+                .select('wallet_address, tnv_balance, games_played, games_won')
+                .order('tnv_balance', { ascending: false })
+                .limit(10);
+
+            if(data) {
+                document.getElementById('leaderboard-body').innerHTML = data.map((u, i) => `
+                    <tr class="${i < 3 ? 'rank-highlight' : ''}">
+                        <td>#${i+1}</td>
+                        <td style="font-family:monospace">${u.wallet_address.includes('GUEST') ? u.wallet_address : u.wallet_address.slice(0,6)+'...'}</td>
+                        <td>${u.games_played || 0}</td>
+                        <td>${u.games_won || 0}</td>
+                        <td>${u.tnv_balance} <span class="tnv-token"></span></td>
+                    </tr>
+                `).join('');
+            }
+        }
 
         async function checkConnection() {
             if (window.ethereum) {
@@ -104,18 +133,23 @@
             }
         }
 
+        async function loadRewards() {
+            const { data } = await supabaseClient.from('user_rewards').select('tnv_balance').eq('wallet_address', myAddress).single();
+            if(data) {
+                document.getElementById('balance-num').innerText = data.tnv_balance;
+                document.getElementById('p-fill').style.width = Math.min((data.tnv_balance / 500 * 100), 100) + "%";
+            }
+        }
+
         async function initMatchmaking() {
-            // Force Wallet Connection first if not present
             if (!myAddress) {
                 if (window.ethereum) {
                     const accs = await window.ethereum.request({ method: 'eth_requestAccounts' });
                     myAddress = accs[0];
                     document.getElementById('start-btn').innerText = "PLAY NOW (0.5 WLD)";
                     loadRewards();
-                    return; // Stop here, user will click again to play
-                } else {
-                    return alert("Please open this game inside World App!");
-                }
+                    return;
+                } else { alert("Please open in World App!"); return; }
             }
 
             if (matchmakingActive) return;
@@ -153,27 +187,9 @@
                    });
         }
 
-        // --- Rest of your perfect timing & game functions stay the same ---
-        async function loadLeaderboard() {
-            const { data } = await supabaseClient.from('user_rewards').select('*').order('tnv_balance', { ascending: false }).limit(10);
-            if(data) {
-                document.getElementById('leaderboard-body').innerHTML = data.map((u, i) => `
-                    <tr><td>#${i+1}</td><td>${u.wallet_address.slice(0,6)}...</td><td>${u.games_played || 0}</td><td>${u.games_won || 0}</td><td>${u.tnv_balance} <span class="tnv-token"></span></td></tr>
-                `).join('');
-            }
-        }
-
-        async function loadRewards() {
-            const { data } = await supabaseClient.from('user_rewards').select('tnv_balance').eq('wallet_address', myAddress).single();
-            if(data) {
-                document.getElementById('balance-num').innerText = data.tnv_balance;
-                document.getElementById('p-fill').style.width = Math.min((data.tnv_balance / 500 * 100), 100) + "%";
-            }
-        }
-
         async function checkBothReady() {
             const { data } = await supabaseClient.from('matches').select('p1_ready, p2_ready').eq('id', matchId).single();
-            if (data.p1_ready && data.p2_ready) {
+            if (data && data.p1_ready && data.p2_ready) {
                 channel.send({ type: 'broadcast', event: 'game_start' });
             } else { setTimeout(checkBothReady, 1000); }
         }
