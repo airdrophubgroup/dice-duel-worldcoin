@@ -3,9 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>TNV Duel Arena | World App Final</title>
+    <title>TNV Duel Arena | Official Mini App Build</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@worldcoin/mini-app-sdk@0.1.0/dist/index.js"></script>
     <style>
         :root { --tnv: #00ff88; --gold: #ffd700; }
         body { background: #121212; color: white; font-family: 'Segoe UI', sans-serif; text-align: center; margin: 0; overflow: hidden; }
@@ -15,7 +15,7 @@
         .progress-bar { width: 60%; height: 8px; background: #333; border-radius: 4px; overflow: hidden; }
         .progress-fill { height: 100%; background: var(--tnv); width: 0%; transition: 0.5s; }
         .leaderboard-section { margin: 20px 10px; background: #1a1a1a; border-radius: 15px; border: 1px solid #333; overflow: hidden; }
-        .lb-header { background: #252525; padding: 12px; color: var(--tnv); font-weight: bold; border-bottom: 1px solid #333; }
+        .lb-header { background: #252525; padding: 12px; color: var(--tnv); font-weight: bold; }
         .lb-table { width: 100%; border-collapse: collapse; font-size: 11px; }
         .lb-table th { padding: 10px; background: #222; color: #888; text-transform: uppercase; }
         .lb-table td { padding: 12px 5px; border-bottom: 1px solid #222; }
@@ -37,7 +37,7 @@
 
     <div id="waiting-overlay">
         <div class="spinner"></div>
-        <h2 id="wait-status">CONNECTING...</h2>
+        <h2 id="wait-status">CONNECTING WORLD WALLET...</h2>
         <p id="match-timer" style="font-size: 24px; color: var(--tnv);">60s</p>
     </div>
 
@@ -51,7 +51,7 @@
 
     <div id="setup-screen">
         <div style="padding: 20px;">
-            <button class="btn" id="start-btn" onclick="handleMatchmaking()">PLAY NOW</button>
+            <button class="btn" id="start-btn" onclick="connectAndPlay()">PLAY NOW</button>
         </div>
         <div class="leaderboard-section">
             <div class="lb-header">🏆 GLOBAL RANKINGS</div>
@@ -82,33 +82,32 @@
 
         let myAddress, matchId, isP1, myScore = 0, oppScore = 0, gameActive = false, channel;
 
+        // Mini-App SDK Initialization
+        const MiniApp = window.MiniApp || {}; 
+
         window.onload = loadLeaderboard;
 
-        // Force Connect and Start Matchmaking in one go
-        async function handleMatchmaking() {
+        async function connectAndPlay() {
             const btn = document.getElementById('start-btn');
             
-            // 1. Check/Connect Wallet
-            if (!myAddress) {
-                if (typeof window.ethereum !== 'undefined') {
-                    try {
-                        const accs = await window.ethereum.request({ method: 'eth_requestAccounts' });
-                        myAddress = accs[0];
-                        loadRewards();
-                        // Wallet milte hi sidha matchmaking shuru karo
-                    } catch (e) {
-                        alert("Wallet connect karna zaroori hai!");
-                        return;
-                    }
-                } else {
-                    alert("World App ke andar hi khel sakte hain!");
-                    return;
+            // 1. Try Native Mini-App Connection
+            try {
+                if (window.ethereum) {
+                    const accs = await window.ethereum.request({ method: 'eth_requestAccounts' });
+                    myAddress = accs[0];
+                } else if (MiniApp && MiniApp.getWalletAddress) {
+                    myAddress = await MiniApp.getWalletAddress();
                 }
-            }
 
-            // 2. Start Matchmaking (If address is now available)
-            if (myAddress) {
-                initMatchmaking();
+                if (myAddress) {
+                    loadRewards();
+                    initMatchmaking();
+                } else {
+                    alert("Unable to find World Wallet. Please use World App.");
+                }
+            } catch (e) {
+                console.error(e);
+                alert("Connection failed. Try again inside World App.");
             }
         }
 
@@ -123,9 +122,8 @@
                 if (timeLeft <= 0 || gameActive) { clearInterval(mTimer); if (!gameActive) location.reload(); }
             }, 1000);
 
-            // Database RPC Call
             const { data, error } = await supabaseClient.rpc('join_or_create_match', { p_address: myAddress });
-            if (error) { alert("Matchmaking error. Please retry."); location.reload(); return; }
+            if (error) { alert("Matchmaking error."); location.reload(); return; }
 
             matchId = data.match_id; isP1 = data.is_p1;
 
