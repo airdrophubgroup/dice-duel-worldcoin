@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>TNV Duel Arena | Official</title>
+    <title>TNV Duel Arena | Final Fixed</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js"></script>
     <style>
@@ -11,21 +11,15 @@
         body { background: #121212; color: white; font-family: 'Segoe UI', sans-serif; text-align: center; margin: 0; overflow-x: hidden; }
         .header { padding: 20px; background: #1e1e1e; border-bottom: 2px solid var(--tnv-green); box-shadow: 0 4px 15px rgba(0,0,0,0.5); }
         .stats-box { display: flex; justify-content: space-around; padding: 15px; background: #252525; margin: 15px; border-radius: 15px; border: 1px solid #333; }
-        
-        /* 3D Dice Styling */
         .scene { width: 100px; height: 100px; margin: 50px auto; perspective: 600px; cursor: pointer; }
         .cube { width: 100%; height: 100%; position: relative; transform-style: preserve-3d; transition: transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
         .cube__face { position: absolute; width: 100px; height: 100px; border: 2px solid #333; line-height: 100px; font-size: 45px; background: white; color: black; border-radius: 12px; font-weight: bold; display: flex; justify-content: center; align-items: center; }
-        .front  { transform: rotateY(  0deg) translateZ(50px); }
-        .back   { transform: rotateY(180deg) translateZ(50px); }
-        .right  { transform: rotateY( 90deg) translateZ(50px); }
-        .left   { transform: rotateY(-90deg) translateZ(50px); }
-        .top    { transform: rotateX( 90deg) translateZ(50px); }
-        .bottom { transform: rotateX(-90deg) translateZ(50px); }
-
+        .front { transform: rotateY(0deg) translateZ(50px); } .back { transform: rotateY(180deg) translateZ(50px); }
+        .right { transform: rotateY(90deg) translateZ(50px); } .left { transform: rotateY(-90deg) translateZ(50px); }
+        .top { transform: rotateX(90deg) translateZ(50px); } .bottom { transform: rotateX(-90deg) translateZ(50px); }
         .btn { background: var(--tnv-green); color: black; border: none; padding: 20px 40px; font-size: 20px; border-radius: 15px; font-weight: bold; cursor: pointer; width: 85%; transition: 0.3s; margin-top: 20px; box-shadow: 0 5px 15px rgba(0,255,136,0.3); }
         .btn:disabled { background: #444; color: #888; cursor: not-allowed; }
-        #status-msg { color: var(--tnv-green); margin-top: 20px; font-weight: bold; min-height: 24px; text-transform: uppercase; letter-spacing: 1px; }
+        #status-msg { color: var(--tnv-green); margin-top: 20px; font-weight: bold; min-height: 24px; text-transform: uppercase; }
         .progress-bar { width: 85%; height: 12px; background: #333; margin: 15px auto; border-radius: 6px; }
         .progress-fill { height: 100%; background: var(--tnv-green); width: 0%; transition: 0.8s ease-in-out; }
     </style>
@@ -45,9 +39,9 @@
 
     <div id="game-screen" style="display:none;">
         <div class="stats-box">
-            <div>ME: <span id="my-score" style="color: var(--tnv-green); font-weight: bold; font-size: 24px;">0</span></div>
-            <div id="timer" style="color: #ff4444; font-weight: bold; font-size: 32px;">30s</div>
-            <div>OPP: <span id="opp-score" style="color: #aaa; font-size: 24px;">0</span></div>
+            <div>ME: <span id="my-score" style="color: var(--tnv-green); font-weight: bold;">0</span></div>
+            <div id="timer" style="color: #ff4444; font-weight: bold; font-size: 28px;">30s</div>
+            <div>OPP: <span id="opp-score" style="color: #aaa;">0</span></div>
         </div>
         <div class="scene" onclick="rollDice()">
             <div class="cube" id="dice-cube">
@@ -105,13 +99,37 @@
         }
 
         function subscribeToMatch() {
-            supabaseClient.channel(`match_${matchId}`).on('postgres_changes', { event:'UPDATE', schema:'public', table:'matches', filter:`id=eq.${matchId}` }, 
-            payload => {
+            console.log("Subscribing to real-time for match:", matchId);
+            const channel = supabaseClient.channel(`match_${matchId}`)
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'matches', filter: `id=eq.${matchId}` }, (payload) => {
                 const d = payload.new;
+                console.log("Real-time Payload Received:", d);
+                
                 document.getElementById('opp-score').innerText = isP1 ? d.p2_score : d.p1_score;
-                if(d.status === 'playing' && !gameActive) startGame();
-                if(d.status === 'finished' && gameActive) { gameActive = false; endGame(); }
-            }).subscribe();
+                
+                if (d.status === 'playing' && !gameActive) {
+                    console.log("Status is playing. Starting game...");
+                    startGame();
+                }
+                if (d.status === 'finished' && gameActive) {
+                    gameActive = false;
+                    endGame();
+                }
+            })
+            .subscribe((status) => {
+                console.log("Channel Status:", status);
+                // Agar P1 ne room banaya hai aur P2 join kar chuka hai status update ke bina (race condition)
+                if (status === 'SUBSCRIBED' && isP1) {
+                    checkIfAlreadyPlaying();
+                }
+            });
+        }
+
+        async function checkIfAlreadyPlaying() {
+            const { data } = await supabaseClient.from('matches').select('status').eq('id', matchId).single();
+            if (data && data.status === 'playing' && !gameActive) {
+                startGame();
+            }
         }
 
         function startGame() {
