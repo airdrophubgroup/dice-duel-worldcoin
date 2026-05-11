@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>TNV Duel Arena | World App Pro</title>
+    <title>TNV Duel Arena | World App Final</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js"></script>
     <style>
@@ -37,7 +37,7 @@
 
     <div id="waiting-overlay">
         <div class="spinner"></div>
-        <h2 id="wait-status">SEARCHING...</h2>
+        <h2 id="wait-status">CONNECTING...</h2>
         <p id="match-timer" style="font-size: 24px; color: var(--tnv);">60s</p>
     </div>
 
@@ -51,7 +51,7 @@
 
     <div id="setup-screen">
         <div style="padding: 20px;">
-            <button class="btn" id="start-btn" onclick="handleStartClick()">CONNECT WORLD WALLET</button>
+            <button class="btn" id="start-btn" onclick="handleMatchmaking()">PLAY NOW</button>
         </div>
         <div class="leaderboard-section">
             <div class="lb-header">🏆 GLOBAL RANKINGS</div>
@@ -84,32 +84,32 @@
 
         window.onload = loadLeaderboard;
 
-        // Sabse important change: User click par hi sab kuch trigger hoga
-        async function handleStartClick() {
+        // Force Connect and Start Matchmaking in one go
+        async function handleMatchmaking() {
             const btn = document.getElementById('start-btn');
             
+            // 1. Check/Connect Wallet
             if (!myAddress) {
-                btn.innerText = "CONNECTING...";
-                if (window.ethereum) {
+                if (typeof window.ethereum !== 'undefined') {
                     try {
-                        const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
-                        myAddress = accounts[0];
-                        btn.innerText = "PLAY NOW (0.5 WLD)";
+                        const accs = await window.ethereum.request({ method: 'eth_requestAccounts' });
+                        myAddress = accs[0];
                         loadRewards();
-                        return; // Connection ke baad user ko dobara click karna hoga (World App security)
-                    } catch (err) {
-                        btn.innerText = "CONNECT WORLD WALLET";
+                        // Wallet milte hi sidha matchmaking shuru karo
+                    } catch (e) {
                         alert("Wallet connect karna zaroori hai!");
                         return;
                     }
                 } else {
-                    alert("Please open this inside World App!");
+                    alert("World App ke andar hi khel sakte hain!");
                     return;
                 }
             }
 
-            // Agar wallet already connected hai, toh matchmaking shuru karo
-            initMatchmaking();
+            // 2. Start Matchmaking (If address is now available)
+            if (myAddress) {
+                initMatchmaking();
+            }
         }
 
         async function initMatchmaking() {
@@ -123,7 +123,10 @@
                 if (timeLeft <= 0 || gameActive) { clearInterval(mTimer); if (!gameActive) location.reload(); }
             }, 1000);
 
-            const { data } = await supabaseClient.rpc('join_or_create_match', { p_address: myAddress });
+            // Database RPC Call
+            const { data, error } = await supabaseClient.rpc('join_or_create_match', { p_address: myAddress });
+            if (error) { alert("Matchmaking error. Please retry."); location.reload(); return; }
+
             matchId = data.match_id; isP1 = data.is_p1;
 
             channel = supabaseClient.channel(`room_${matchId}`, { config: { broadcast: { self: true } } });
