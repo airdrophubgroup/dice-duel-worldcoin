@@ -3,12 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>TNV Duel Arena | World App Stable</title>
-    
+    <title>TNV Duel Arena | Internal Sync</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@walletconnect/web3-provider@1.8.0/dist/umd/index.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js"></script>
-
     <style>
         :root { --tnv: #00ff88; --gold: #ffd700; }
         body { background: #121212; color: white; font-family: 'Segoe UI', sans-serif; text-align: center; margin: 0; overflow: hidden; }
@@ -16,10 +12,8 @@
         .header { padding: 15px; background: #1e1e1e; border-bottom: 2px solid var(--tnv); }
         .progress-bar { width: 60%; height: 8px; background: #333; border-radius: 4px; margin: 10px auto; overflow: hidden; }
         .progress-fill { height: 100%; background: var(--tnv); width: 0%; transition: 0.5s; }
-        .btn { background: var(--tnv); color: black; border: none; padding: 18px 30px; font-size: 18px; border-radius: 12px; font-weight: bold; width: 85%; cursor: pointer; box-shadow: 0 4px 15px rgba(0,255,136,0.3); }
-        
-        /* Matchmaking & Game Screens */
-        #waiting-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(18,18,18,0.98); z-index: 1000; display: none; flex-direction: column; align-items: center; justify-content: center; }
+        .btn { background: var(--tnv); color: black; border: none; padding: 18px 30px; font-size: 18px; border-radius: 12px; font-weight: bold; width: 85%; cursor: pointer; }
+        #waiting-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #121212; z-index: 1000; display: none; flex-direction: column; align-items: center; justify-content: center; }
         .spinner { width: 40px; height: 40px; border: 4px solid #333; border-top: 4px solid var(--tnv); border-radius: 50%; animation: spin 1s linear infinite; }
         @keyframes spin { 100% { transform: rotate(360deg); } }
         .lb-section { margin: 20px 10px; background: #1a1a1a; border-radius: 15px; border: 1px solid #333; overflow: hidden; }
@@ -31,10 +25,140 @@
 
     <div id="waiting-overlay">
         <div class="spinner"></div>
-        <h2 id="wait-status">MATCHING PLAYERS...</h2>
+        <h2 id="wait-status">SYNCING WALLET...</h2>
     </div>
 
     <div class="header">
+        <h1>TNV Duel Arena🎲</h1>
+        <div class="progress-bar"><div id="p-fill" class="progress-fill"></div></div>
+        <div style="font-size:14px; margin-top:5px;">Balance: <span id="balance-num">0</span> <span class="tnv-token"></span></div>
+    </div>
+
+    <div id="setup-screen">
+        <div style="padding: 40px 20px;">
+            <button class="btn" id="start-btn" onclick="directConnect()">PLAY NOW</button>
+            <p id="status-msg" style="margin-top:10px; font-size:12px; color:#888;">Nihal Vihar Special Edition</p>
+        </div>
+        <div class="lb-section">
+            <div style="padding:10px; background:#222; font-weight:bold;">🏆 TOP DUELISTS</div>
+            <table class="lb-table"><tbody id="lb-body"></tbody></table>
+        </div>
+    </div>
+
+    <div id="game-screen" style="display:none; padding-top:50px;">
+        <h2 id="game-timer" style="color:#ff4444; font-size:40px;">30s</h2>
+        <div style="display:flex; justify-content:space-around; margin:20px;">
+            <div>ME: <span id="my-score">0</span></div>
+            <div>OPP: <span id="opp-score">0</span></div>
+        </div>
+        <div style="width:100px; height:100px; background:white; color:black; font-size:40px; line-height:100px; border-radius:15px; margin:auto; font-weight:bold;" onclick="rollDice()">🎲</div>
+    </div>
+
+    <script>
+        const SB_URL = "https://efmkazyrxllcyvcwmewd.supabase.co";
+        const SB_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVmbWthenlyeGxsY3l2Y3dtZXdkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg0ODYzMTMsImV4cCI6MjA5NDA2MjMxM30.PaKHyjZOkDCcyK0x7Qd1_DSSTS_ra5PYDuZwYIf5GyA";
+        const supabaseClient = supabase.createClient(SB_URL, SB_KEY);
+
+        let myAddress, matchId, isP1, myScore = 0, oppScore = 0, gameActive = false, channel;
+
+        window.onload = loadLeaderboard;
+
+        // INTERNAL BRIDGE CONNECTION (Directly hits World App)
+        async function directConnect() {
+            const btn = document.getElementById('start-btn');
+            const status = document.getElementById('status-msg');
+            btn.disabled = true;
+
+            // World App provider check
+            const provider = window.ethereum || (window.parent ? window.parent.ethereum : null);
+
+            if (provider) {
+                try {
+                    // Ye seedha World App ka native popup trigger karega
+                    const accounts = await provider.request({ method: 'eth_requestAccounts' });
+                    myAddress = accounts[0];
+                    status.innerText = "Wallet Connected!";
+                    loadRewards();
+                    initMatchmaking();
+                } catch (err) {
+                    btn.disabled = false;
+                    status.innerText = "Connection Failed. Try again.";
+                }
+            } else {
+                btn.disabled = false;
+                status.innerText = "Please use World App browser";
+                alert("Game ko World App ke andar 'Apps' section se kholo!");
+            }
+        }
+
+        async function initMatchmaking() {
+            document.getElementById('waiting-overlay').style.display = 'flex';
+            const { data } = await supabaseClient.rpc('join_or_create_match', { p_address: myAddress });
+            matchId = data.match_id; isP1 = data.is_p1;
+
+            channel = supabaseClient.channel(`room_${matchId}`, { config: { broadcast: { self: true } } });
+            channel.on('broadcast', { event: 'start' }, () => {
+                document.getElementById('waiting-overlay').style.display = 'none';
+                document.getElementById('setup-screen').style.display = 'none';
+                document.getElementById('game-screen').style.display = 'block';
+                gameActive = true;
+                startTimer();
+            }).on('broadcast', { event: 'score' }, ({payload}) => {
+                if(payload.addr !== myAddress) document.getElementById('opp-score').innerText = payload.val;
+            }).subscribe(async (s) => {
+                if(s === 'SUBSCRIBED') {
+                    await supabaseClient.from('matches').update(isP1 ? {p1_ready:true} : {p2_ready:true}).eq('id', matchId);
+                    checkReady();
+                }
+            });
+        }
+
+        async function checkReady() {
+            const { data } = await supabaseClient.from('matches').select('p1_ready, p2_ready').eq('id', matchId).single();
+            if(data.p1_ready && data.p2_ready) channel.send({type:'broadcast', event:'start'});
+            else setTimeout(checkReady, 1000);
+        }
+
+        function startTimer() {
+            let t = 30;
+            const iv = setInterval(() => {
+                t--; document.getElementById('game-timer').innerText = t + "s";
+                if (t <= 0) { clearInterval(iv); finalize(); }
+            }, 1000);
+        }
+
+        function rollDice() {
+            if(!gameActive) return;
+            myScore += Math.floor(Math.random()*6)+1;
+            document.getElementById('my-score').innerText = myScore;
+            channel.send({type:'broadcast', event:'score', payload:{addr:myAddress, val:myScore}});
+            supabaseClient.from('matches').update(isP1 ? {p1_score:myScore} : {p2_score:myScore}).eq('id', matchId);
+        }
+
+        async function finalize() {
+            gameActive = false;
+            const { data: m } = await supabaseClient.from('matches').select('*').eq('id', matchId).single();
+            const win = isP1 ? m.p1_score > m.p2_score : m.p2_score > m.p1_score;
+            await supabaseClient.rpc('increment_tnv', { player_wallet: myAddress, amount: win ? 15 : 10 });
+            alert(win ? "YOU WON!" : "YOU LOST!");
+            location.reload();
+        }
+
+        async function loadLeaderboard() {
+            const { data } = await supabaseClient.from('user_rewards').select('*').order('tnv_balance', { ascending: false }).limit(5);
+            if(data) document.getElementById('lb-body').innerHTML = data.map((u,i)=>`<tr><td>#${i+1}</td><td>${u.wallet_address.slice(0,6)}...</td><td>${u.tnv_balance}</td></tr>`).join('');
+        }
+
+        async function loadRewards() {
+            const { data } = await supabaseClient.from('user_rewards').select('tnv_balance').eq('wallet_address', myAddress).single();
+            if(data) {
+                document.getElementById('balance-num').innerText = data.tnv_balance;
+                document.getElementById('p-fill').style.width = Math.min((data.tnv_balance / 500 * 100), 100) + "%";
+            }
+        }
+    </script>
+</body>
+</html>    <div class="header">
         <h1>TNV Duel Arena🎲</h1>
         <div class="progress-bar"><div id="p-fill" class="progress-fill"></div></div>
         <div style="font-size:14px; margin-top:5px;">Balance: <span id="balance-num">0</span> <span class="tnv-token"></span></div>
