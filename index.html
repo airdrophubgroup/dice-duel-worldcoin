@@ -1,126 +1,229 @@
 <!DOCTYPE html>
-<html lang="hi">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>TNV Duel Arena | Absolute Sync</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0">
+    <title>TOFFEENVH - PvP Duel Edition</title>
+    <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/6.7.0/ethers.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/5.7.2/ethers.umd.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
     <style>
-        :root { --tnv: #00ff88; --bg: #121212; }
-        body { background: var(--bg); color: white; font-family: sans-serif; text-align: center; margin: 0; }
-        .header { padding: 20px; background: #1e1e1e; border-bottom: 2px solid var(--tnv); }
-        .btn { background: var(--tnv); color: black; border: none; padding: 20px 40px; font-size: 22px; border-radius: 15px; font-weight: bold; width: 85%; margin-top: 50px; cursor: pointer; box-shadow: 0 0 20px rgba(0,255,136,0.3); }
-        #status-box { margin-top: 20px; padding: 15px; font-size: 14px; color: #aaa; }
-        .loader { width: 30px; height: 30px; border: 3px solid #333; border-top-color: var(--tnv); border-radius: 50%; animation: spin 1s linear infinite; display: none; margin: 10px auto; }
-        @keyframes spin { 100% { transform: rotate(360deg); } }
-        #game-screen { display: none; padding: 20px; }
-        .dice { font-size: 60px; margin: 30px; cursor: pointer; }
+        :root { --primary: #38bdf8; --bg: #030712; --card: rgba(30, 41, 59, 0.4); }
+        body { font-family: 'Segoe UI', sans-serif; background: radial-gradient(circle at top, #0f172a 0%, #030712 100%); color: #f8fafc; margin: 0; min-height: 100vh; overflow-x: hidden; }
+        .glass-card { background: rgba(17, 24, 39, 0.3); backdrop-filter: blur(12px); border: 1px solid rgba(56, 189, 248, 0.15); transition: 0.4s; }
+        #rewardsApp { display: none; padding: 15px; animation: fadeIn 0.4s ease-out; }
+        .app-container { max-width: 450px; margin: 15px auto; background: var(--card); padding: 25px; border-radius: 30px; border: 1px solid rgba(56, 189, 248, 0.2); backdrop-filter: blur(20px); }
+        input { width: 100%; height: 60px; background: #000; color: #fff; border: 2px solid #1e293b; border-radius: 15px; text-align: center; font-weight: bold; outline: none; }
+        .btn-app { width: 100%; padding: 18px; border-radius: 18px; font-weight: bold; text-transform: uppercase; transition: 0.2s; cursor: pointer; border: none; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(15px); } to { opacity: 1; transform: translateY(0); } }
+        
+        /* Game Specific */
+        #gameArea { display: none; }
+        #waitingScreen { display: none; }
+        .dice-tap { font-size: 70px; cursor: pointer; user-select: none; transition: 0.1s; }
+        .dice-tap:active { transform: scale(0.8) rotate(15deg); }
     </style>
 </head>
 <body>
 
-    <div class="header">
-        <h1>TNV Duel Arena🎲</h1>
-        <p>Nihal Vihar Elite Build v3.0</p>
+    <div id="landingPage">
+        <nav class="h-20 flex items-center px-4 border-b border-sky-900/40 bg-slate-950/70 backdrop-blur-xl sticky top-0 z-50">
+            <div class="max-w-6xl mx-auto w-full flex justify-between items-center">
+                <div class="flex items-center space-x-3"><i class="fas fa-candy-cane text-3xl text-sky-400"></i><span class="text-2xl font-black uppercase tracking-tighter">Toffeenvh</span></div>
+                <button onclick="showApp()" class="bg-sky-500 text-slate-950 px-6 py-2 rounded-full font-bold text-sm uppercase">Launch App</button>
+            </div>
+        </nav>
+        <header class="py-32 text-center px-4">
+            <h1 class="text-5xl md:text-7xl font-black mb-6 bg-gradient-to-r from-sky-400 to-purple-600 bg-clip-text text-transparent italic">TNV PvP Duel Arena</h1>
+            <p class="text-slate-300 mb-10">Play Dice Duel with Real Players and win $TOFFEE Rewards.</p>
+            <button onclick="showApp()" class="bg-sky-500 text-slate-950 px-10 py-4 rounded-xl font-black text-xl shadow-2xl">💰 PLAY & EARN</button>
+        </header>
     </div>
 
-    <div id="setup-screen">
-        <button class="btn" id="main-btn" onclick="masterConnect()">PLAY NOW</button>
-        <div id="status-box">
-            <div id="loader" class="loader"></div>
-            <p id="status-msg">Click to link your World Wallet</p>
+    <div id="rewardsApp">
+        <div class="max-w-lg mx-auto flex justify-between px-4 mb-6">
+            <button onclick="showLanding()" class="text-sky-400 font-black bg-sky-500/10 px-6 py-2 rounded-xl text-xs uppercase">← HOME</button>
+            <span class="text-[10px] text-slate-500 font-bold uppercase">Celo Network Live</span>
         </div>
-    </div>
 
-    <div id="game-screen">
-        <div style="display:flex; justify-content:space-around; font-size:20px;">
-            <div>ME: <span id="my-score">0</span></div>
-            <div id="timer" style="color:red; font-weight:bold;">30s</div>
-            <div>OPP: <span id="opp-score">0</span></div>
+        <div class="app-container">
+            <p id="displayUsername" class="text-center text-amber-500 font-bold text-[12px] mb-4 uppercase italic">Connect Wallet First</p>
+            
+            <button id="walletBtn" class="btn-app bg-amber-500 text-slate-950 mb-6" onclick="connectWallet()">CONNECT WALLET</button>
+
+            <div id="userUI" class="hidden space-y-6">
+                <div class="bg-black/60 p-6 rounded-[30px] border border-sky-500/30 text-center shadow-inner">
+                    <p class="text-slate-500 text-[10px] uppercase font-black">Total Earnings</p>
+                    <span id="balText" class="text-5xl font-black text-white">0.00</span>
+                    <p class="text-sky-400 text-[10px] mt-1 font-bold italic">$TOFFEE</p>
+                </div>
+
+                <div class="bg-slate-900/80 p-6 rounded-[30px] border border-amber-500/30 text-center">
+                    <h3 class="text-amber-500 font-black uppercase text-xs mb-4 tracking-widest italic">⚔️ Dice Battle Arena</h3>
+                    
+                    <div id="gameLobby">
+                        <p class="text-[10px] text-slate-400 mb-4">Entry: 5 TOFFEE | Win: 8.5 TOFFEE</p>
+                        <button onclick="startMatchmaking()" class="w-full bg-amber-500 text-slate-950 py-3 rounded-xl font-black text-sm active:scale-95 transition">FIND OPPONENT</button>
+                    </div>
+
+                    <div id="waitingScreen">
+                        <div class="flex flex-col items-center py-4">
+                            <div class="w-8 h-8 border-4 border-amber-500 border-t-transparent rounded-full animate-spin mb-3"></div>
+                            <p class="text-white font-bold text-xs">Searching Players...</p>
+                            <p id="searchTimer" class="text-amber-500 text-lg font-black mt-1">60s</p>
+                        </div>
+                    </div>
+
+                    <div id="gameArea">
+                        <div class="flex justify-between items-center mb-6">
+                            <div class="text-left"><p class="text-[8px] text-sky-400 font-bold">ME</p><p id="myScore" class="text-3xl font-black text-sky-400">0</p></div>
+                            <div class="text-center"><p id="battleTimer" class="text-xl font-black text-red-500">30s</p></div>
+                            <div class="text-right"><p id="p2Name" class="text-[8px] text-slate-500 font-bold uppercase">OPP</p><p id="oppScore" class="text-3xl font-black text-slate-400">0</p></div>
+                        </div>
+                        <div class="dice-tap" onclick="rollDicePVP()">🎲</div>
+                    </div>
+                </div>
+
+                <div class="space-y-3">
+                    <input type="text" id="codeInput" placeholder="ENTER MAGIC CODE">
+                    <button onclick="processClaim()" class="btn-app bg-sky-500 text-slate-950 py-4">💰 Claim Code</button>
+                </div>
+            </div>
         </div>
-        <div class="dice" onclick="rollDice()">🎲</div>
     </div>
 
     <script>
-        const SB_URL = "https://efmkazyrxllcyvcwmewd.supabase.co";
-        const SB_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVmbWthenlyeGxsY3l2Y3dtZXdkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg0ODYzMTMsImV4cCI6MjA5NDA2MjMxM30.PaKHyjZOkDCcyK0x7Qd1_DSSTS_ra5PYDuZwYIf5GyA";
-        const supabaseClient = supabase.createClient(SB_URL, SB_KEY);
+        const SB_URL = 'https://xshsfgyfbbnommuhvwat.supabase.co';
+        const SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhzaHNmZ3lmYmJub21tdWh2d2F0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM5OTA4OTYsImV4cCI6MjA4OTU2Njg5Nn0.bv_tP_jH74wzDz99tFBYlcaaZRPqmIkXnYvI_aUbKpo';
+        const db = supabase.createClient(SB_URL, SB_KEY);
 
-        let myAddress, matchId, myScore = 0, gameActive = false;
+        let userWallet = ""; let userBalance = 0; let currentUsername = "";
+        let matchId = null; let isP1 = false; let channel = null;
+        let myCurrentScore = 0; let oppCurrentScore = 0; let duelActive = false;
 
-        async function masterConnect() {
-            const btn = document.getElementById('main-btn');
-            const msg = document.getElementById('status-msg');
-            const loader = document.getElementById('loader');
+        function showApp() { document.getElementById('landingPage').classList.add('hidden'); document.getElementById('rewardsApp').style.display = 'block'; }
+        function showLanding() { document.getElementById('landingPage').classList.remove('hidden'); document.getElementById('rewardsApp').style.display = 'none'; }
 
-            btn.disabled = true;
-            loader.style.display = "block";
-            msg.innerText = "Connecting to World Chain...";
-
-            try {
-                // FORCE DETECTION: World App Bridge Check
-                let provider = window.ethereum;
+        async function connectWallet() {
+            if (window.ethereum) {
+                const accs = await window.ethereum.request({ method: 'eth_requestAccounts' });
+                userWallet = accs[0].toLowerCase();
+                const { data } = await db.from('user_balances').select('*').eq('wallet_address', userWallet).maybeSingle();
                 
-                if (!provider && window.parent) {
-                    provider = window.parent.ethereum;
-                }
-
-                if (!provider) {
-                    // World App internal detection retry
-                    await new Promise(r => setTimeout(r, 1000));
-                    provider = window.ethereum || (window.parent ? window.parent.ethereum : null);
-                }
-
-                if (provider) {
-                    const accounts = await provider.request({ method: 'eth_requestAccounts' });
-                    myAddress = accounts[0];
-                    
-                    if (myAddress) {
-                        msg.innerText = "Wallet Linked! Finding Match...";
-                        startMatchmaking();
-                    }
+                if (data && data.username) {
+                    currentUsername = data.username;
+                    document.getElementById("displayUsername").innerText = `@${currentUsername}`;
+                    document.getElementById("userUI").classList.remove('hidden');
+                    document.getElementById("walletBtn").classList.add('hidden');
+                    refreshData();
                 } else {
-                    throw new Error("No Wallet Detected");
+                    const nick = prompt("Enter Username for Nihal Vihar ID:");
+                    if(nick) {
+                        await db.from('user_balances').upsert({ wallet_address: userWallet, username: nick.toUpperCase(), pending_balance: 0 });
+                        location.reload();
+                    }
                 }
-            } catch (err) {
-                console.error(err);
-                btn.disabled = false;
-                loader.style.display = "none";
-                msg.innerHTML = "<span style='color:#ff4444;'>Connection Failed.</span><br>1. Open World App<br>2. Go to 'Apps' tab<br>3. Search your App and open.";
+            } else { alert("Open in MetaMask/TrustWallet Browser!"); }
+        }
+
+        async function refreshData() {
+            const { data } = await db.from('user_balances').select('pending_balance').eq('wallet_address', userWallet).maybeSingle();
+            if (data) {
+                userBalance = parseFloat(data.pending_balance);
+                document.getElementById("balText").innerText = userBalance.toFixed(2);
             }
         }
 
+        // MATCHMAKING LOGIC
         async function startMatchmaking() {
-            const { data, error } = await supabaseClient.rpc('join_or_create_match', { p_address: myAddress });
-            if (error) { alert("Matchmaking error!"); return; }
+            if(userBalance < 5) return alert("Min 5 TOFFEE required!");
             
-            matchId = data.match_id;
-            document.getElementById('setup-screen').style.display = "none";
-            document.getElementById('game-screen').style.display = "block";
-            gameActive = true;
-            startTimer();
+            document.getElementById('gameLobby').style.display = 'none';
+            document.getElementById('waitingScreen').style.display = 'block';
+
+            let timeLeft = 60;
+            const sTimer = setInterval(() => {
+                timeLeft--;
+                document.getElementById('searchTimer').innerText = timeLeft + "s";
+                if(timeLeft <= 0 && !duelActive) { clearInterval(sTimer); location.reload(); }
+            }, 1000);
+
+            const { data, error } = await db.rpc('join_or_create_match', { p_address: userWallet });
+            if(error) return location.reload();
+
+            matchId = data.match_id; isP1 = data.is_p1;
+
+            channel = db.channel(`duel_${matchId}`, { config: { broadcast: { self: true } } });
+            channel.on('broadcast', { event: 'start' }, () => {
+                clearInterval(sTimer);
+                beginBattle();
+            }).on('broadcast', { event: 'score_sync' }, ({payload}) => {
+                if(payload.wallet !== userWallet) {
+                    oppCurrentScore = payload.score;
+                    document.getElementById('oppScore').innerText = oppCurrentScore;
+                    document.getElementById('p2Name').innerText = payload.user.substring(0,8);
+                }
+            }).subscribe(async (status) => {
+                if(status === 'SUBSCRIBED') checkReady();
+            });
         }
 
-        function startTimer() {
-            let t = 30;
-            const iv = setInterval(() => {
-                t--;
-                document.getElementById('timer').innerText = t + "s";
-                if(t <= 0) { clearInterval(iv); finalize(); }
+        async function checkReady() {
+            const { data } = await db.from('matches').select('p1_ready, p2_ready').eq('id', matchId).single();
+            if(data && data.p1_ready && data.p2_ready) {
+                // Deduct 5 Tokens
+                await db.from('user_balances').update({ pending_balance: userBalance - 5 }).eq('wallet_address', userWallet);
+                channel.send({ type: 'broadcast', event: 'start' });
+            } else { setTimeout(checkReady, 2000); }
+        }
+
+        function beginBattle() {
+            document.getElementById('waitingScreen').style.display = 'none';
+            document.getElementById('gameArea').style.display = 'block';
+            duelActive = true; myCurrentScore = 0; oppCurrentScore = 0;
+
+            let timer = 30;
+            const bTimer = setInterval(() => {
+                timer--; document.getElementById('battleTimer').innerText = timer + "s";
+                if(timer <= 0) { clearInterval(bTimer); endBattle(); }
             }, 1000);
         }
 
-        function rollDice() {
-            if(!gameActive) return;
-            myScore += Math.floor(Math.random() * 6) + 1;
-            document.getElementById('my-score').innerText = myScore;
+        function rollDicePVP() {
+            if(!duelActive) return;
+            myCurrentScore += Math.floor(Math.random() * 6) + 1;
+            document.getElementById('myScore').innerText = myCurrentScore;
+            channel.send({ type: 'broadcast', event: 'score_sync', payload: { wallet: userWallet, score: myCurrentScore, user: currentUsername } });
         }
 
-        async function finalize() {
-            gameActive = false;
-            alert("Game Over! Your Score: " + myScore);
+        async function endBattle() {
+            duelActive = false;
+            const win = myCurrentScore > oppCurrentScore;
+            const tie = myCurrentScore === oppCurrentScore;
+
+            if(win) {
+                confetti();
+                alert(`VICTORY! +8.5 TOFFEE`);
+                await db.from('user_balances').update({ pending_balance: userBalance + 8.5 }).eq('wallet_address', userWallet);
+            } else if(tie) {
+                alert("Tie! 5 TOFFEE Refunded.");
+                await db.from('user_balances').update({ pending_balance: userBalance }).eq('wallet_address', userWallet);
+            } else {
+                alert("Defeat!");
+            }
             location.reload();
+        }
+
+        async function processClaim() {
+            const code = document.getElementById('codeInput').value.trim().toUpperCase();
+            if(!code) return;
+            const { data } = await db.rpc('claim_toffee_code', { user_wallet: userWallet, input_code: code });
+            if (data === 'SUCCESS') { confetti(); refreshData(); alert("1 TOFFEE Claimed!"); }
+            else { alert("Invalid Code!"); }
+            document.getElementById('codeInput').value = "";
         }
     </script>
 </body>
