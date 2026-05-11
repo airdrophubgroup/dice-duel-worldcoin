@@ -14,10 +14,10 @@
         .tnv-container { display: flex; align-items: center; justify-content: center; margin-top: 8px; }
         .progress-bar { width: 60%; height: 8px; background: #333; border-radius: 4px; overflow: hidden; }
         .progress-fill { height: 100%; background: var(--tnv); width: 0%; transition: 0.5s; }
-        .leaderboard-section { margin: 25px 10px; background: #1a1a1a; border-radius: 15px; border: 1px solid #333; overflow: hidden; }
+        .leaderboard-section { margin: 20px 10px; background: #1a1a1a; border-radius: 15px; border: 1px solid #333; overflow: hidden; }
         .lb-header { background: #252525; padding: 12px; color: var(--tnv); font-weight: bold; border-bottom: 1px solid #333; }
         .lb-table { width: 100%; border-collapse: collapse; font-size: 11px; }
-        .lb-table th { padding: 10px; background: #222; color: #888; text-transform: uppercase; border-bottom: 1px solid #333; }
+        .lb-table th { padding: 10px; background: #222; color: #888; text-transform: uppercase; }
         .lb-table td { padding: 12px 5px; border-bottom: 1px solid #222; }
         .stats-box { display: flex; justify-content: space-around; padding: 15px; background: #252525; margin: 15px; border-radius: 15px; border: 1px solid #333; }
         .scene { width: 100px; height: 100px; margin: 40px auto; perspective: 600px; }
@@ -37,7 +37,7 @@
 
     <div id="waiting-overlay">
         <div class="spinner"></div>
-        <h2 id="wait-status">SEARCHING FOR OPPONENT...</h2>
+        <h2 id="wait-status">SEARCHING...</h2>
         <p id="match-timer" style="font-size: 24px; color: var(--tnv);">60s</p>
     </div>
 
@@ -51,7 +51,7 @@
 
     <div id="setup-screen">
         <div style="padding: 20px;">
-            <button class="btn" id="start-btn" onclick="initMatchmaking()">INITIALIZING WALLET...</button>
+            <button class="btn" id="start-btn" onclick="handleStartClick()">CONNECT WORLD WALLET</button>
         </div>
         <div class="leaderboard-section">
             <div class="lb-header">🏆 GLOBAL RANKINGS</div>
@@ -82,44 +82,37 @@
 
         let myAddress, matchId, isP1, myScore = 0, oppScore = 0, gameActive = false, channel;
 
-        window.onload = async () => {
-            loadLeaderboard();
-            autoConnect();
-        };
+        window.onload = loadLeaderboard;
 
-        // World App Force Connection
-        async function autoConnect() {
+        // Sabse important change: User click par hi sab kuch trigger hoga
+        async function handleStartClick() {
             const btn = document.getElementById('start-btn');
-            // Mini App environment check
-            if (window.ethereum) {
-                try {
-                    const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
-                    myAddress = accounts[0];
-                    btn.innerText = "PLAY NOW (0.5 WLD)";
-                    loadRewards();
-                } catch (err) {
-                    btn.innerText = "TAP TO CONNECT WALLET";
+            
+            if (!myAddress) {
+                btn.innerText = "CONNECTING...";
+                if (window.ethereum) {
+                    try {
+                        const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
+                        myAddress = accounts[0];
+                        btn.innerText = "PLAY NOW (0.5 WLD)";
+                        loadRewards();
+                        return; // Connection ke baad user ko dobara click karna hoga (World App security)
+                    } catch (err) {
+                        btn.innerText = "CONNECT WORLD WALLET";
+                        alert("Wallet connect karna zaroori hai!");
+                        return;
+                    }
+                } else {
+                    alert("Please open this inside World App!");
+                    return;
                 }
-            } else {
-                // If not in World App, we wait or provide a guest ID for testing
-                btn.innerText = "TAP TO RE-SYNC WALLET";
             }
+
+            // Agar wallet already connected hai, toh matchmaking shuru karo
+            initMatchmaking();
         }
 
         async function initMatchmaking() {
-            if (!myAddress) {
-                if (window.ethereum) {
-                    try {
-                        const accs = await window.ethereum.request({ method: 'eth_requestAccounts' });
-                        myAddress = accs[0];
-                        loadRewards();
-                    } catch (e) { return alert("Please connect your World Wallet!"); }
-                } else {
-                    // Fallback for testing ONLY - delete this line before final listing
-                    myAddress = "DEBUG_" + Math.floor(Math.random()*1000);
-                }
-            }
-
             document.getElementById('start-btn').disabled = true;
             document.getElementById('waiting-overlay').style.display = 'flex';
 
