@@ -3,8 +3,12 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>TNV Duel Arena | World App Elite</title>
+    <title>TNV Duel Arena | World App Stable</title>
+    
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@walletconnect/web3-provider@1.8.0/dist/umd/index.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js"></script>
+
     <style>
         :root { --tnv: #00ff88; --gold: #ffd700; }
         body { background: #121212; color: white; font-family: 'Segoe UI', sans-serif; text-align: center; margin: 0; overflow: hidden; }
@@ -13,11 +17,11 @@
         .progress-bar { width: 60%; height: 8px; background: #333; border-radius: 4px; margin: 10px auto; overflow: hidden; }
         .progress-fill { height: 100%; background: var(--tnv); width: 0%; transition: 0.5s; }
         .btn { background: var(--tnv); color: black; border: none; padding: 18px 30px; font-size: 18px; border-radius: 12px; font-weight: bold; width: 85%; cursor: pointer; box-shadow: 0 4px 15px rgba(0,255,136,0.3); }
-        .btn:disabled { background: #444; color: #888; }
+        
+        /* Matchmaking & Game Screens */
         #waiting-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(18,18,18,0.98); z-index: 1000; display: none; flex-direction: column; align-items: center; justify-content: center; }
         .spinner { width: 40px; height: 40px; border: 4px solid #333; border-top: 4px solid var(--tnv); border-radius: 50%; animation: spin 1s linear infinite; }
         @keyframes spin { 100% { transform: rotate(360deg); } }
-        /* Tables */
         .lb-section { margin: 20px 10px; background: #1a1a1a; border-radius: 15px; border: 1px solid #333; overflow: hidden; }
         .lb-table { width: 100%; border-collapse: collapse; font-size: 11px; }
         .lb-table td { padding: 12px 5px; border-bottom: 1px solid #222; }
@@ -27,8 +31,7 @@
 
     <div id="waiting-overlay">
         <div class="spinner"></div>
-        <h2 id="wait-status">CONNECTING WALLET...</h2>
-        <p id="match-timer" style="color: var(--tnv); font-size: 20px;">60s</p>
+        <h2 id="wait-status">MATCHING PLAYERS...</h2>
     </div>
 
     <div class="header">
@@ -39,11 +42,11 @@
 
     <div id="setup-screen">
         <div style="padding: 40px 20px;">
-            <button class="btn" id="start-btn" onclick="startOfficialProcess()">PLAY NOW</button>
-            <p id="status-msg" style="margin-top:10px; font-size:12px; color:#888;">Nihal Vihar Edition | Ready to Sync</p>
+            <button class="btn" id="start-btn" onclick="connectWallet()">PLAY NOW</button>
+            <p id="status-msg" style="margin-top:10px; font-size:12px; color:#888;">WalletConnect Standard Protocol</p>
         </div>
         <div class="lb-section">
-            <div style="padding:10px; background:#222; font-weight:bold;">🏆 TOP PLAYERS</div>
+            <div style="padding:10px; background:#222; font-weight:bold;">🏆 TOP DUELISTS</div>
             <table class="lb-table"><tbody id="lb-body"></tbody></table>
         </div>
     </div>
@@ -66,36 +69,35 @@
 
         window.onload = loadLeaderboard;
 
-        // OFFICIAL CONNECTION BYPASS
-        async function startOfficialProcess() {
-            const btn = document.getElementById('start-btn');
-            const status = document.getElementById('status-msg');
-            btn.disabled = true;
-            status.innerText = "Scanning for World Wallet...";
+        // TOFFEENVH STYLE CONNECTION
+        async function connectWallet() {
+            try {
+                // WalletConnect Provider setup
+                const provider = new WalletConnectProvider.default({
+                    rpc: { 137: "https://polygon-rpc.com" }, // Hum chain koi bhi rakh sakte hain detection ke liye
+                    qrcodeModalOptions: { mobileLinks: ["worldapp"] }
+                });
 
-            // Retry for 5 seconds to find the provider
-            let provider = null;
-            for (let i = 0; i < 10; i++) {
-                provider = window.ethereum || (window.parent ? window.parent.ethereum : null);
-                if (provider) break;
-                await new Promise(r => setTimeout(r, 500));
-            }
+                // Enable session (triggers World App popup)
+                await provider.enable();
 
-            if (provider) {
-                try {
-                    const accounts = await provider.request({ method: 'eth_requestAccounts' });
-                    myAddress = accounts[0];
-                    status.innerText = "Wallet Linked!";
+                const web3Provider = new ethers.providers.Web3Provider(provider);
+                const signer = web3Provider.getSigner();
+                myAddress = await signer.getAddress();
+
+                if (myAddress) {
+                    document.getElementById('status-msg').innerText = "Linked: " + myAddress.slice(0,6);
                     loadRewards();
                     initMatchmaking();
-                } catch (err) {
-                    btn.disabled = false;
-                    status.innerText = "Connection Denied. Tap Play Again.";
                 }
-            } else {
-                btn.disabled = false;
-                status.innerText = "Wallet not detected. Refresh App.";
-                alert("Please make sure you've opened this in the World App Apps tab!");
+            } catch (error) {
+                console.error("Connection failed", error);
+                // Fallback: Agar WalletConnect fail ho, tabhi injected provider try karein
+                if(window.ethereum) {
+                    const accs = await window.ethereum.request({ method: 'eth_requestAccounts' });
+                    myAddress = accs[0];
+                    initMatchmaking();
+                }
             }
         }
 
@@ -148,7 +150,7 @@
             const { data: m } = await supabaseClient.from('matches').select('*').eq('id', matchId).single();
             const win = isP1 ? m.p1_score > m.p2_score : m.p2_score > m.p1_score;
             await supabaseClient.rpc('increment_tnv', { player_wallet: myAddress, amount: win ? 15 : 10 });
-            alert(win ? "YOU WON!" : "YOU LOST!");
+            alert(win ? "VICTORY!" : "DEFEAT!");
             location.reload();
         }
 
