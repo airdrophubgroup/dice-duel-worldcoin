@@ -7,11 +7,24 @@
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <style>
         :root { --tnv: #00ff88; --gold: #ffd700; }
-        body { background: #121212; color: white; font-family: 'Segoe UI', sans-serif; text-align: center; margin: 0; overflow: hidden; }
-        .tnv-token { display: inline-block; width: 18px; height: 18px; background: linear-gradient(145deg, #cd7f32, #ffd700); border-radius: 50%; border: 1px solid #ffd700; vertical-align: middle; }
+        body { background: #121212; color: white; font-family: 'Segoe UI', sans-serif; text-align: center; margin: 0; overflow-x: hidden; }
+        
+        /* TNV Coin Symbol */
+        .tnv-token { display: inline-block; width: 18px; height: 18px; background: linear-gradient(145deg, #cd7f32, #ffd700); border-radius: 50%; color: #121212; font-weight: bold; font-size: 11px; line-height: 18px; border: 1px solid #ffd700; vertical-align: middle; box-shadow: 0 0 5px rgba(255,215,0,0.5); }
+
         .header { padding: 15px; background: #1e1e1e; border-bottom: 2px solid var(--tnv); }
-        .progress-bar { width: 60%; height: 8px; background: #333; border-radius: 4px; margin: 10px auto; overflow: hidden; }
+        .tnv-container { display: flex; align-items: center; justify-content: center; margin-top: 8px; }
+        .progress-bar { width: 60%; height: 8px; background: #333; border-radius: 4px; overflow: hidden; }
         .progress-fill { height: 100%; background: var(--tnv); width: 0%; transition: 0.5s; }
+
+        /* Leaderboard Design */
+        .leaderboard-section { margin: 25px 10px; background: #1a1a1a; border-radius: 15px; border: 1px solid #333; overflow: hidden; }
+        .lb-header { background: #252525; padding: 12px; color: var(--tnv); font-weight: bold; font-size: 18px; border-bottom: 1px solid #333; }
+        .lb-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+        .lb-table th { padding: 10px; background: #222; color: #888; border-bottom: 1px solid #333; }
+        .lb-table td { padding: 12px 8px; border-bottom: 1px solid #222; }
+        .rank-highlight { color: var(--gold); font-weight: bold; }
+
         .stats-box { display: flex; justify-content: space-around; padding: 15px; background: #252525; margin: 15px; border-radius: 15px; border: 1px solid #333; }
         .scene { width: 100px; height: 100px; margin: 40px auto; perspective: 600px; }
         .cube { width: 100%; height: 100%; position: relative; transform-style: preserve-3d; transition: transform 0.2s; cursor: pointer; }
@@ -19,8 +32,10 @@
         .front { transform: rotateY(0deg) translateZ(50px); } .back { transform: rotateY(180deg) translateZ(50px); }
         .right { transform: rotateY(90deg) translateZ(50px); } .left { transform: rotateY(-90deg) translateZ(50px); }
         .top { transform: rotateX(90deg) translateZ(50px); } .bottom { transform: rotateX(-90deg) translateZ(50px); }
+        
         .btn { background: var(--tnv); color: black; border: none; padding: 18px 30px; font-size: 18px; border-radius: 12px; font-weight: bold; width: 85%; cursor: pointer; }
         .btn:disabled { background: #444; color: #888; }
+        
         #waiting-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #121212; z-index: 1000; display: none; flex-direction: column; align-items: center; justify-content: center; }
         .spinner { width: 50px; height: 50px; border: 5px solid #333; border-top: 5px solid var(--tnv); border-radius: 50%; animation: spin 1s linear infinite; margin-bottom: 20px; }
         @keyframes spin { 100% { transform: rotate(360deg); } }
@@ -36,13 +51,28 @@
 
     <div class="header">
         <h1>TNV Duel Arena🎲</h1>
-        <div class="progress-bar"><div id="p-fill" class="progress-fill"></div></div>
-        <div id="balance-area">Balance: <span id="balance-num">0</span> <span class="tnv-token"></span></div>
+        <div class="tnv-container">
+            <div class="progress-bar"><div id="p-fill" class="progress-fill"></div></div>
+            <div style="margin-left:10px;"><span id="balance-num" style="font-weight:bold;">0</span> <span class="tnv-token"></span></div>
+        </div>
     </div>
 
-    <div id="setup-screen" style="padding-top: 50px;">
-        <button class="btn" id="start-btn" onclick="initMatchmaking()">PLAY NOW (0.5 WLD)</button>
-        <div id="lb-container" style="margin-top:30px; font-size:12px;"></div>
+    <div id="setup-screen">
+        <div style="padding: 20px;">
+            <button class="btn" id="start-btn" onclick="initMatchmaking()">PLAY NOW (0.5 WLD)</button>
+        </div>
+
+        <div class="leaderboard-section">
+            <div class="lb-header">🏆 GLOBAL RANKINGS</div>
+            <table class="lb-table">
+                <thead>
+                    <tr><th>Rank</th><th>Player</th><th>Played</th><th>Won</th><th>TNV</th></tr>
+                </thead>
+                <tbody id="leaderboard-body">
+                    <tr><td colspan="5">Loading...</td></tr>
+                </tbody>
+            </table>
+        </div>
     </div>
 
     <div id="game-screen" style="display:none;">
@@ -65,11 +95,37 @@
 
         let myAddress, matchId, isP1, myScore = 0, oppScore = 0, gameActive = false, matchmakingActive = false, channel;
 
+        window.onload = () => {
+            loadLeaderboard();
+        };
+
+        async function loadLeaderboard() {
+            const { data } = await supabaseClient.from('user_rewards').select('*').order('tnv_balance', { ascending: false }).limit(10);
+            if(data) {
+                document.getElementById('leaderboard-body').innerHTML = data.map((u, i) => `
+                    <tr class="${i < 3 ? 'rank-highlight' : ''}">
+                        <td>#${i+1}</td>
+                        <td style="font-family:monospace">${u.wallet_address.slice(0,6)}...</td>
+                        <td>${u.games_played || 0}</td>
+                        <td>${u.games_won || 0}</td>
+                        <td>${u.tnv_balance} <span class="tnv-token"></span></td>
+                    </tr>
+                `).join('');
+            }
+        }
+
+        async function loadRewards() {
+            const { data } = await supabaseClient.from('user_rewards').select('tnv_balance').eq('wallet_address', myAddress).single();
+            if(data) {
+                document.getElementById('balance-num').innerText = data.tnv_balance;
+                document.getElementById('p-fill').style.width = Math.min((data.tnv_balance / 500 * 100), 100) + "%";
+            }
+        }
+
         async function initMatchmaking() {
             if (matchmakingActive) return;
             matchmakingActive = true;
-            const btn = document.getElementById('start-btn');
-            btn.disabled = true;
+            document.getElementById('start-btn').disabled = true;
             document.getElementById('waiting-overlay').style.display = 'flex';
 
             if (window.ethereum) {
@@ -77,7 +133,8 @@
                 myAddress = accs[0];
             } else { myAddress = "GUEST_" + Math.floor(Math.random()*1000); }
 
-            // 60s Waiting Logic
+            loadRewards();
+
             let timeLeft = 60;
             const mTimer = setInterval(() => {
                 timeLeft--;
@@ -91,9 +148,7 @@
             const { data } = await supabaseClient.rpc('join_or_create_match', { p_address: myAddress });
             matchId = data.match_id; isP1 = data.is_p1;
 
-            // Broadcast Channel for Instant Sync
             channel = supabaseClient.channel(`room_${matchId}`, { config: { broadcast: { self: true } } });
-
             channel.on('broadcast', { event: 'game_start' }, () => startSyncCountdown())
                    .on('broadcast', { event: 'score_update' }, ({ payload }) => {
                         if (payload.sender !== myAddress) {
@@ -114,9 +169,7 @@
             const { data } = await supabaseClient.from('matches').select('p1_ready, p2_ready').eq('id', matchId).single();
             if (data.p1_ready && data.p2_ready) {
                 channel.send({ type: 'broadcast', event: 'game_start' });
-            } else {
-                setTimeout(checkBothReady, 1000); // Check every second until both are in
-            }
+            } else { setTimeout(checkBothReady, 1000); }
         }
 
         function startSyncCountdown() {
@@ -154,10 +207,7 @@
             myScore += Math.floor(Math.random() * 6) + 1;
             document.getElementById('my-score').innerText = myScore;
             document.getElementById('dice-cube').style.transform = `rotateX(${Math.random()*360}deg) rotateY(${Math.random()*360}deg)`;
-            
-            // Instant score broadcast
             channel.send({ type: 'broadcast', event: 'score_update', payload: { sender: myAddress, score: myScore } });
-            // DB backup
             await supabaseClient.from('matches').update(isP1 ? { p1_score: myScore } : { p2_score: myScore }).eq('id', matchId);
         }
 
@@ -170,13 +220,13 @@
 
             await supabaseClient.rpc('increment_tnv', { player_wallet: myAddress, amount: win ? 15 : 10 });
             alert(win ? "VICTORY! +15 TNV" : "GAME OVER! +10 TNV");
-            location.reload(); // Reset to Home
+            location.reload();
         }
 
         function resetToHome() {
             document.getElementById('waiting-overlay').style.display = 'none';
             document.getElementById('start-btn').disabled = false;
-            document.getElementById('start-btn').innerText = "TRY AGAIN (NO OPPONENT)";
+            document.getElementById('start-btn').innerText = "PLAY NOW (0.5 WLD)";
             matchmakingActive = false;
         }
     </script>
