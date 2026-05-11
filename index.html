@@ -3,13 +3,13 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>TNV Duel Arena | World App Elite</title>
+    <title>TNV Duel Arena | Absolute Final</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js"></script>
     <style>
         :root { --tnv: #00ff88; --gold: #ffd700; }
         body { background: #121212; color: white; font-family: 'Segoe UI', sans-serif; text-align: center; margin: 0; overflow: hidden; }
-        .tnv-token { display: inline-block; width: 18px; height: 18px; background: linear-gradient(145deg, #cd7f32, #ffd700); border-radius: 50%; border: 1px solid #ffd700; vertical-align: middle; box-shadow: 0 0 5px rgba(255,215,0,0.5); }
+        .tnv-token { display: inline-block; width: 18px; height: 18px; background: linear-gradient(145deg, #cd7f32, #ffd700); border-radius: 50%; border: 1px solid #ffd700; vertical-align: middle; }
         .header { padding: 15px; background: #1e1e1e; border-bottom: 2px solid var(--tnv); }
         .tnv-container { display: flex; align-items: center; justify-content: center; margin-top: 8px; }
         .progress-bar { width: 60%; height: 8px; background: #333; border-radius: 4px; overflow: hidden; }
@@ -51,7 +51,7 @@
 
     <div id="setup-screen">
         <div style="padding: 20px;">
-            <button class="btn" id="start-btn" onclick="tryConnect()">PLAY NOW</button>
+            <button class="btn" id="start-btn" onclick="startDuelProcess()">PLAY NOW</button>
         </div>
         <div class="leaderboard-section">
             <div class="lb-header">🏆 GLOBAL RANKINGS</div>
@@ -84,38 +84,33 @@
 
         window.onload = loadLeaderboard;
 
-        // Smart Wallet Detection
-        async function tryConnect() {
+        // Ultimate Connection Handler
+        async function startDuelProcess() {
             const btn = document.getElementById('start-btn');
-            btn.innerText = "CONNECTING...";
+            btn.innerText = "DETECTING WALLET...";
 
-            // 1. Force detection for World App internal provider
-            if (window.ethereum) {
-                try {
-                    const accs = await window.ethereum.request({ method: 'eth_requestAccounts' });
-                    myAddress = accs[0];
-                } catch (e) {
-                    console.log("Ethereum request failed, trying fallback...");
-                }
-            }
-
-            // 2. If address still not found, check for potential Mini App SDK globals
-            if (!myAddress) {
-                // Some Mini Apps use a delayed injection
-                await new Promise(r => setTimeout(r, 1000));
+            // Retry logic for World App Bridge
+            let detected = false;
+            for (let i = 0; i < 5; i++) {
                 if (window.ethereum) {
-                    const accs = await window.ethereum.request({ method: 'eth_requestAccounts' });
-                    myAddress = accs[0];
+                    try {
+                        const provider = new ethers.providers.Web3Provider(window.ethereum);
+                        const accounts = await provider.send("eth_requestAccounts", []);
+                        myAddress = accounts[0];
+                        detected = true;
+                        break;
+                    } catch (e) { console.log("Retrying connection..."); }
                 }
+                await new Promise(r => setTimeout(r, 800));
             }
 
-            if (myAddress) {
+            if (detected) {
                 btn.innerText = "PLAY NOW";
                 loadRewards();
                 initMatchmaking();
             } else {
-                btn.innerText = "PLAY NOW";
-                alert("World Wallet not detected. If you are in World App, please wait a second and try again.");
+                btn.innerText = "RETRY CONNECTION";
+                alert("Wallet not found. If you are in World App, please refresh or wait 2 seconds.");
             }
         }
 
