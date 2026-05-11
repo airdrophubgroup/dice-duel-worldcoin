@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>TNV Duel Arena | Absolute Final</title>
+    <title>TNV Duel Arena | Official Bridge</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js"></script>
     <style>
@@ -19,6 +19,10 @@
         .lb-table { width: 100%; border-collapse: collapse; font-size: 11px; }
         .lb-table th { padding: 10px; background: #222; color: #888; text-transform: uppercase; }
         .lb-table td { padding: 12px 5px; border-bottom: 1px solid #222; }
+        .btn { background: var(--tnv); color: black; border: none; padding: 18px 30px; font-size: 18px; border-radius: 12px; font-weight: bold; width: 85%; cursor: pointer; }
+        .btn:disabled { background: #444; color: #888; }
+        
+        /* Game Screens */
         .stats-box { display: flex; justify-content: space-around; padding: 15px; background: #252525; margin: 15px; border-radius: 15px; border: 1px solid #333; }
         .scene { width: 100px; height: 100px; margin: 40px auto; perspective: 600px; }
         .cube { width: 100%; height: 100%; position: relative; transform-style: preserve-3d; transition: transform 0.2s; cursor: pointer; }
@@ -26,8 +30,7 @@
         .front { transform: rotateY(0deg) translateZ(50px); } .back { transform: rotateY(180deg) translateZ(50px); }
         .right { transform: rotateY(90deg) translateZ(50px); } .left { transform: rotateY(-90deg) translateZ(50px); }
         .top { transform: rotateX(90deg) translateZ(50px); } .bottom { transform: rotateX(-90deg) translateZ(50px); }
-        .btn { background: var(--tnv); color: black; border: none; padding: 18px 30px; font-size: 18px; border-radius: 12px; font-weight: bold; width: 85%; cursor: pointer; }
-        .btn:disabled { background: #444; color: #888; }
+
         #waiting-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #121212; z-index: 1000; display: none; flex-direction: column; align-items: center; justify-content: center; }
         .spinner { width: 50px; height: 50px; border: 5px solid #333; border-top: 5px solid var(--tnv); border-radius: 50%; animation: spin 1s linear infinite; margin-bottom: 20px; }
         @keyframes spin { 100% { transform: rotate(360deg); } }
@@ -51,13 +54,14 @@
 
     <div id="setup-screen">
         <div style="padding: 20px;">
-            <button class="btn" id="start-btn" onclick="startDuelProcess()">PLAY NOW</button>
+            <button class="btn" id="start-btn" onclick="masterConnect()">PLAY NOW</button>
+            <p id="debug-msg" style="font-size:10px; color:#555; margin-top:5px;"></p>
         </div>
         <div class="leaderboard-section">
             <div class="lb-header">🏆 GLOBAL RANKINGS</div>
             <table class="lb-table">
                 <thead><tr><th>Rank</th><th>Player</th><th>P</th><th>W</th><th>TNV</th></tr></thead>
-                <tbody id="leaderboard-body"><tr><td colspan="5">Loading...</td></tr></tbody>
+                <tbody id="leaderboard-body"></tbody>
             </table>
         </div>
     </div>
@@ -84,40 +88,44 @@
 
         window.onload = loadLeaderboard;
 
-        // Ultimate Connection Handler
-        async function startDuelProcess() {
+        // MASTER CONNECT: World App Native standard
+        async function masterConnect() {
             const btn = document.getElementById('start-btn');
-            btn.innerText = "DETECTING WALLET...";
+            const debug = document.getElementById('debug-msg');
+            btn.disabled = true;
+            btn.innerText = "LINKING WALLET...";
 
-            // Retry logic for World App Bridge
-            let detected = false;
-            for (let i = 0; i < 5; i++) {
-                if (window.ethereum) {
-                    try {
-                        const provider = new ethers.providers.Web3Provider(window.ethereum);
-                        const accounts = await provider.send("eth_requestAccounts", []);
-                        myAddress = accounts[0];
-                        detected = true;
-                        break;
-                    } catch (e) { console.log("Retrying connection..."); }
+            try {
+                // Priority 1: World App Injected Provider (EIP-6963 / EIP-1193)
+                const provider = window.ethereum || (window.parent && window.parent.ethereum);
+                
+                if (provider) {
+                    const accounts = await provider.request({ method: 'eth_requestAccounts' });
+                    myAddress = accounts[0];
+                } else {
+                    // Priority 2: Fallback for some Mini App versions
+                    const res = await window.request({ method: 'eth_accounts' });
+                    myAddress = res[0];
                 }
-                await new Promise(r => setTimeout(r, 800));
-            }
 
-            if (detected) {
-                btn.innerText = "PLAY NOW";
-                loadRewards();
-                initMatchmaking();
-            } else {
+                if (myAddress) {
+                    btn.innerText = "READY!";
+                    loadRewards();
+                    initMatchmaking();
+                } else {
+                    throw new Error("No address found");
+                }
+            } catch (err) {
+                console.error(err);
+                btn.disabled = false;
                 btn.innerText = "RETRY CONNECTION";
-                alert("Wallet not found. If you are in World App, please refresh or wait 2 seconds.");
+                debug.innerText = "Status: Please open in World App Apps section.";
+                alert("Connection failed. Make sure you are using the World App.");
             }
         }
 
         async function initMatchmaking() {
-            document.getElementById('start-btn').disabled = true;
             document.getElementById('waiting-overlay').style.display = 'flex';
-
             let timeLeft = 60;
             const mTimer = setInterval(() => {
                 timeLeft--;
@@ -125,9 +133,7 @@
                 if (timeLeft <= 0 || gameActive) { clearInterval(mTimer); if (!gameActive) location.reload(); }
             }, 1000);
 
-            const { data, error } = await supabaseClient.rpc('join_or_create_match', { p_address: myAddress });
-            if (error) { alert("Matchmaking error."); location.reload(); return; }
-
+            const { data } = await supabaseClient.rpc('join_or_create_match', { p_address: myAddress });
             matchId = data.match_id; isP1 = data.is_p1;
 
             channel = supabaseClient.channel(`room_${matchId}`, { config: { broadcast: { self: true } } });
@@ -158,11 +164,11 @@
             if (gameActive) return;
             gameActive = true;
             let cd = 3;
-            const timer = setInterval(() => {
+            const t = setInterval(() => {
                 document.getElementById('wait-status').innerText = `STARTING IN ${cd}...`;
                 cd--;
                 if (cd < 0) {
-                    clearInterval(timer);
+                    clearInterval(t);
                     document.getElementById('waiting-overlay').style.display = 'none';
                     document.getElementById('setup-screen').style.display = 'none';
                     document.getElementById('game-screen').style.display = 'block';
@@ -193,7 +199,6 @@
             gameActive = false;
             const { data: m } = await supabaseClient.from('matches').select('*').eq('id', matchId).single();
             const win = isP1 ? m.p1_score > m.p2_score : m.p2_score > m.p1_score;
-
             try {
                 const { data: u } = await supabaseClient.from('user_rewards').select('games_played, games_won').eq('wallet_address', myAddress).single();
                 await supabaseClient.from('user_rewards').update({
@@ -202,18 +207,13 @@
                 }).eq('wallet_address', myAddress);
                 await supabaseClient.rpc('increment_tnv', { player_wallet: myAddress, amount: win ? 15 : 10 });
             } catch (e) {}
-
             alert(win ? "VICTORY! +15 TNV" : "GAME OVER! +10 TNV");
             location.reload();
         }
 
         async function loadLeaderboard() {
-            const { data } = await supabaseClient.from('user_rewards').select('wallet_address, tnv_balance, games_played, games_won').order('tnv_balance', { ascending: false }).limit(10);
-            if(data) {
-                document.getElementById('leaderboard-body').innerHTML = data.map((u, i) => `
-                    <tr><td>#${i+1}</td><td>${u.wallet_address.slice(0,6)}...</td><td>${u.games_played || 0}</td><td>${u.games_won || 0}</td><td>${u.tnv_balance} <span class="tnv-token"></span></td></tr>
-                `).join('');
-            }
+            const { data } = await supabaseClient.from('user_rewards').select('*').order('tnv_balance', { ascending: false }).limit(10);
+            if(data) document.getElementById('leaderboard-body').innerHTML = data.map((u, i) => `<tr><td>#${i+1}</td><td>${u.wallet_address.slice(0,6)}...</td><td>${u.games_played || 0}</td><td>${u.games_won || 0}</td><td>${u.tnv_balance} <span class="tnv-token"></span></td></tr>`).join('');
         }
 
         async function loadRewards() {
