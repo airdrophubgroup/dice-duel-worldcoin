@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>TNV Duel Arena | Force End Fixed</title>
+    <title>TNV Duel Arena | Absolute Fix</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js"></script>
     <style>
@@ -92,6 +92,7 @@
             matchId = data.match_id; isP1 = data.is_p1;
             
             syncInterval = setInterval(async () => {
+                if(!matchId) return;
                 const { data: mData } = await supabaseClient.from('matches').select('*').eq('id', matchId).single();
                 if(mData) {
                     document.getElementById('opp-score').innerText = isP1 ? mData.p2_score : mData.p1_score;
@@ -114,9 +115,13 @@
                 document.getElementById('setup-screen').style.display = 'none';
                 document.getElementById('game-screen').style.display = 'block';
                 timerInterval = setInterval(() => {
+                    if(!gameActive) return;
                     timeLeft--;
                     document.getElementById('timer').innerText = timeLeft + "s";
-                    if(timeLeft <= 0) { clearInterval(timerInterval); finishMatch(); }
+                    if(timeLeft <= 0) { 
+                        clearInterval(timerInterval); 
+                        forceFinish(); 
+                    }
                 }, 1000);
             }, 3000);
         }
@@ -129,32 +134,38 @@
             await supabaseClient.from('matches').update(isP1 ? { p1_score: myScore } : { p2_score: myScore }).eq('id', matchId);
         }
 
-        async function finishMatch() {
+        // Timer khatam hote hi database ko batayein
+        async function forceFinish() {
+            if(!matchId) return;
             await supabaseClient.from('matches').update({ status: 'finished' }).eq('id', matchId);
+            // Safety: Agar doosre player ka net slow ho, toh 3 sec baad khud hi triggerEnd chala do
+            setTimeout(() => { if(gameActive) triggerEnd(); }, 3000);
         }
 
         async function triggerEnd() {
-            if(!matchId) return;
+            if(!gameActive || !matchId) return;
+            gameActive = false;
             clearInterval(syncInterval);
             clearInterval(timerInterval);
-            gameActive = false;
+            
             makeCoinsFall(10);
             
-            setTimeout(async () => {
-                const { data: finalM } = await supabaseClient.from('matches').select('*').eq('id', matchId).single();
-                const win = isP1 ? finalM.p1_score > finalM.p2_score : finalM.p2_score > finalM.p1_score;
-                const { data: curStat } = await supabaseClient.from('user_rewards').select('games_played, games_won').eq('wallet_address', myAddress).single();
-                
-                await supabaseClient.from('user_rewards').update({ 
-                    games_played: (curStat.games_played || 0) + 1,
-                    games_won: win ? (curStat.games_won || 0) + 1 : (curStat.games_won || 0)
-                }).eq('wallet_address', myAddress);
-                
-                await supabaseClient.rpc('increment_tnv', { player_wallet: myAddress, amount: win ? 15 : 10 });
-                alert(win ? "VICTORY! +15 TNV" : "GAME OVER! +10 TNV");
-                location.reload();
-            }, 1000);
-            matchId = null; // Prevent double trigger
+            // Final Fetch
+            const { data: finalM } = await supabaseClient.from('matches').select('*').eq('id', matchId).single();
+            const win = isP1 ? finalM.p1_score > finalM.p2_score : finalM.p2_score > finalM.p1_score;
+            
+            const { data: curStat } = await supabaseClient.from('user_rewards').select('games_played, games_won').eq('wallet_address', myAddress).single();
+            
+            await supabaseClient.from('user_rewards').update({ 
+                games_played: (curStat.games_played || 0) + 1,
+                games_won: win ? (curStat.games_won || 0) + 1 : (curStat.games_won || 0)
+            }).eq('wallet_address', myAddress);
+            
+            await supabaseClient.rpc('increment_tnv', { player_wallet: myAddress, amount: win ? 15 : 10 });
+            
+            alert(win ? "VICTORY! +15 TNV" : "GAME OVER! +10 TNV");
+            matchId = null;
+            location.reload();
         }
 
         function makeCoinsFall(amt) {
