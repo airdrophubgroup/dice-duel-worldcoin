@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>TNV Duel Arena | World App Sync</title>
+    <title>TNV Duel Arena | Final Build</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js"></script>
     <style>
@@ -16,7 +16,6 @@
         .progress-bar { width: 60%; height: 8px; background: #333; border-radius: 4px; overflow: hidden; }
         .progress-fill { height: 100%; background: var(--tnv); width: 0%; transition: 0.5s; }
 
-        /* Leaderboard Fix */
         .leaderboard-section { margin: 25px 10px; background: #1a1a1a; border-radius: 15px; border: 1px solid #333; overflow: hidden; }
         .lb-header { background: #252525; padding: 12px; color: var(--tnv); font-weight: bold; font-size: 16px; border-bottom: 1px solid #333; }
         .lb-table { width: 100%; border-collapse: collapse; font-size: 11px; }
@@ -59,20 +58,11 @@
         <div style="padding: 20px;">
             <button class="btn" id="start-btn" onclick="initMatchmaking()">CONNECT WORLD WALLET</button>
         </div>
-
         <div class="leaderboard-section">
             <div class="lb-header">🏆 GLOBAL RANKINGS</div>
             <table class="lb-table">
-                <thead>
-                    <tr>
-                        <th>Rank</th>
-                        <th>Player</th>
-                        <th>P</th> <th>W</th> <th>TNV</th>
-                    </tr>
-                </thead>
-                <tbody id="leaderboard-body">
-                    <tr><td colspan="5">Loading Data...</td></tr>
-                </tbody>
+                <thead><tr><th>Rank</th><th>Player</th><th>P</th><th>W</th><th>TNV</th></tr></thead>
+                <tbody id="leaderboard-body"><tr><td colspan="5">Loading Data...</td></tr></tbody>
             </table>
         </div>
     </div>
@@ -103,17 +93,12 @@
         };
 
         async function loadLeaderboard() {
-            const { data, error } = await supabaseClient
-                .from('user_rewards')
-                .select('wallet_address, tnv_balance, games_played, games_won')
-                .order('tnv_balance', { ascending: false })
-                .limit(10);
-
+            const { data } = await supabaseClient.from('user_rewards').select('wallet_address, tnv_balance, games_played, games_won').order('tnv_balance', { ascending: false }).limit(10);
             if(data) {
                 document.getElementById('leaderboard-body').innerHTML = data.map((u, i) => `
                     <tr class="${i < 3 ? 'rank-highlight' : ''}">
                         <td>#${i+1}</td>
-                        <td style="font-family:monospace">${u.wallet_address.includes('GUEST') ? u.wallet_address : u.wallet_address.slice(0,6)+'...'}</td>
+                        <td style="font-family:monospace">${u.wallet_address.slice(0,6)}...</td>
                         <td>${u.games_played || 0}</td>
                         <td>${u.games_won || 0}</td>
                         <td>${u.tnv_balance} <span class="tnv-token"></span></td>
@@ -146,10 +131,9 @@
                 if (window.ethereum) {
                     const accs = await window.ethereum.request({ method: 'eth_requestAccounts' });
                     myAddress = accs[0];
-                    document.getElementById('start-btn').innerText = "PLAY NOW (0.5 WLD)";
-                    loadRewards();
+                    checkConnection();
                     return;
-                } else { alert("Please open in World App!"); return; }
+                } else { alert("Open in World App!"); return; }
             }
 
             if (matchmakingActive) return;
@@ -240,7 +224,15 @@
             const opF = isP1 ? m.p2_score : m.p1_score;
             const win = myF > opF;
 
-            await supabaseClient.rpc('increment_tnv', { player_wallet: myAddress, amount: win ? 15 : 10 });
+            try {
+                const { data: u } = await supabaseClient.from('user_rewards').select('games_played, games_won').eq('wallet_address', myAddress).single();
+                await supabaseClient.from('user_rewards').update({
+                    games_played: (u ? u.games_played : 0) + 1,
+                    games_won: win ? ((u ? u.games_won : 0) + 1) : (u ? u.games_won : 0)
+                }).eq('wallet_address', myAddress);
+                await supabaseClient.rpc('increment_tnv', { player_wallet: myAddress, amount: win ? 15 : 10 });
+            } catch (e) {}
+
             alert(win ? "VICTORY! +15 TNV" : "GAME OVER! +10 TNV");
             location.reload();
         }
