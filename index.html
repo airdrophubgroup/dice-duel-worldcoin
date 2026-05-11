@@ -3,13 +3,13 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>TNV Duel Arena | Final Fixed</title>
+    <title>TNV Duel Arena | Fail-Safe</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js"></script>
     <style>
         :root { --tnv-green: #00ff88; }
         body { background: #121212; color: white; font-family: 'Segoe UI', sans-serif; text-align: center; margin: 0; overflow-x: hidden; }
-        .header { padding: 20px; background: #1e1e1e; border-bottom: 2px solid var(--tnv-green); box-shadow: 0 4px 15px rgba(0,0,0,0.5); }
+        .header { padding: 20px; background: #1e1e1e; border-bottom: 2px solid var(--tnv-green); }
         .stats-box { display: flex; justify-content: space-around; padding: 15px; background: #252525; margin: 15px; border-radius: 15px; border: 1px solid #333; }
         .scene { width: 100px; height: 100px; margin: 50px auto; perspective: 600px; cursor: pointer; }
         .cube { width: 100%; height: 100%; position: relative; transform-style: preserve-3d; transition: transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
@@ -17,24 +17,21 @@
         .front { transform: rotateY(0deg) translateZ(50px); } .back { transform: rotateY(180deg) translateZ(50px); }
         .right { transform: rotateY(90deg) translateZ(50px); } .left { transform: rotateY(-90deg) translateZ(50px); }
         .top { transform: rotateX(90deg) translateZ(50px); } .bottom { transform: rotateX(-90deg) translateZ(50px); }
-        .btn { background: var(--tnv-green); color: black; border: none; padding: 20px 40px; font-size: 20px; border-radius: 15px; font-weight: bold; cursor: pointer; width: 85%; transition: 0.3s; margin-top: 20px; box-shadow: 0 5px 15px rgba(0,255,136,0.3); }
-        .btn:disabled { background: #444; color: #888; cursor: not-allowed; }
-        #status-msg { color: var(--tnv-green); margin-top: 20px; font-weight: bold; min-height: 24px; text-transform: uppercase; }
-        .progress-bar { width: 85%; height: 12px; background: #333; margin: 15px auto; border-radius: 6px; }
-        .progress-fill { height: 100%; background: var(--tnv-green); width: 0%; transition: 0.8s ease-in-out; }
+        .btn { background: var(--tnv-green); color: black; border: none; padding: 20px 40px; font-size: 20px; border-radius: 15px; font-weight: bold; cursor: pointer; width: 85%; transition: 0.3s; margin-top: 20px; }
+        .btn:disabled { background: #444; color: #888; }
+        #status-msg { color: var(--tnv-green); margin-top: 20px; font-weight: bold; }
     </style>
 </head>
 <body>
 
     <div class="header">
         <h1>TNV Duel Arena 🎲</h1>
-        <div id="tnv-display">Airdrop Balance: 0 / 500 TNV</div>
-        <div class="progress-bar"><div id="p-fill" class="progress-fill"></div></div>
+        <div id="tnv-display">Airdrop Balance: Loading...</div>
     </div>
 
     <div id="setup-screen" style="padding: 60px 20px;">
         <button class="btn" id="start-btn" onclick="initGame()">PLAY NOW (0.5 WLD)</button>
-        <p id="status-msg">Click to Join the Battle</p>
+        <p id="status-msg">Ready to start</p>
     </div>
 
     <div id="game-screen" style="display:none;">
@@ -50,7 +47,6 @@
                 <div class="cube__face top">2</div><div class="cube__face bottom">5</div>
             </div>
         </div>
-        <p>TAP DICE FAST TO SCORE!</p>
     </div>
 
     <script>
@@ -58,7 +54,7 @@
         const SB_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVmbWthenlyeGxsY3l2Y3dtZXdkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg0ODYzMTMsImV4cCI6MjA5NDA2MjMxM30.PaKHyjZOkDCcyK0x7Qd1_DSSTS_ra5PYDuZwYIf5GyA";
         const supabaseClient = supabase.createClient(SB_URL, SB_KEY);
 
-        let myAddress, matchId, isP1, myScore = 0, gameActive = false, timeLeft = 30;
+        let myAddress, matchId, isP1, myScore = 0, gameActive = false, timeLeft = 30, pollInterval;
 
         async function initGame() {
             if (window.ethereum) {
@@ -68,7 +64,7 @@
                     myAddress = accounts[0];
                 } catch (e) { return alert("Wallet rejected."); }
             } else {
-                let guest = prompt("Naam daalein (Testing):");
+                let guest = prompt("Naam daalein:");
                 if(!guest) return;
                 myAddress = "GUEST_" + guest.toUpperCase();
             }
@@ -80,10 +76,7 @@
 
         async function loadRewards() {
             const { data } = await supabaseClient.from('user_rewards').select('tnv_balance').eq('wallet_address', myAddress).single();
-            if(data) {
-                document.getElementById('tnv-display').innerText = `Airdrop Balance: ${data.tnv_balance} / 500 TNV`;
-                document.getElementById('p-fill').style.width = Math.min((data.tnv_balance / 500 * 100), 100) + "%";
-            }
+            if(data) document.getElementById('tnv-display').innerText = `Balance: ${data.tnv_balance} TNV`;
         }
 
         async function findMatch() {
@@ -95,62 +88,48 @@
                 const { data: newMatch } = await supabaseClient.from('matches').insert([{ player_1: myAddress, status: 'waiting' }]).select();
                 matchId = newMatch[0].id; isP1 = true;
             }
-            subscribeToMatch();
+            startSync();
         }
 
-        function subscribeToMatch() {
-            console.log("Subscribing to real-time for match:", matchId);
-            const channel = supabaseClient.channel(`match_${matchId}`)
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'matches', filter: `id=eq.${matchId}` }, (payload) => {
-                const d = payload.new;
-                console.log("Real-time Payload Received:", d);
-                
-                document.getElementById('opp-score').innerText = isP1 ? d.p2_score : d.p1_score;
-                
-                if (d.status === 'playing' && !gameActive) {
-                    console.log("Status is playing. Starting game...");
-                    startGame();
-                }
-                if (d.status === 'finished' && gameActive) {
-                    gameActive = false;
-                    endGame();
-                }
-            })
-            .subscribe((status) => {
-                console.log("Channel Status:", status);
-                // Agar P1 ne room banaya hai aur P2 join kar chuka hai status update ke bina (race condition)
-                if (status === 'SUBSCRIBED' && isP1) {
-                    checkIfAlreadyPlaying();
-                }
-            });
+        function startSync() {
+            // 1. Real-time Subscription (Fastest)
+            supabaseClient.channel(`m_${matchId}`).on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'matches', filter: `id=eq.${matchId}` }, (p) => {
+                handleUpdate(p.new);
+            }).subscribe();
+
+            // 2. Backup Polling (Har 2 second mein database check karega)
+            pollInterval = setInterval(async () => {
+                const { data } = await supabaseClient.from('matches').select('*').eq('id', matchId).single();
+                if(data) handleUpdate(data);
+            }, 2000);
         }
 
-        async function checkIfAlreadyPlaying() {
-            const { data } = await supabaseClient.from('matches').select('status').eq('id', matchId).single();
-            if (data && data.status === 'playing' && !gameActive) {
-                startGame();
-            }
+        function handleUpdate(d) {
+            document.getElementById('opp-score').innerText = isP1 ? d.p2_score : d.p1_score;
+            if (d.status === 'playing' && !gameActive) startGame();
+            if (d.status === 'finished' && gameActive) endGame();
         }
 
         function startGame() {
+            clearInterval(pollInterval); // Stop searching
             document.getElementById('setup-screen').style.display = 'none';
             document.getElementById('game-screen').style.display = 'block';
             gameActive = true;
-            const timerInt = setInterval(() => {
+            const t = setInterval(() => {
                 timeLeft--; 
                 document.getElementById('timer').innerText = timeLeft + "s";
-                if(timeLeft <= 0) { clearInterval(timerInt); if(gameActive) endGame(); }
+                if(timeLeft <= 0) { clearInterval(t); if(gameActive) endGame(); }
             }, 1000);
         }
 
         function rollDice() {
             if(!gameActive) return;
-            const cube = document.getElementById('dice-cube');
-            cube.style.transform = `rotateX(${Math.floor(Math.random()*4)*90}deg) rotateY(${Math.floor(Math.random()*4)*90}deg)`;
             myScore += Math.floor(Math.random() * 6) + 1;
             document.getElementById('my-score').innerText = myScore;
             const update = isP1 ? { p1_score: myScore } : { p2_score: myScore };
             supabaseClient.from('matches').update(update).eq('id', matchId);
+            // Dice rotation
+            document.getElementById('dice-cube').style.transform = `rotateX(${Math.random()*360}deg) rotateY(${Math.random()*360}deg)`;
         }
 
         async function endGame() {
@@ -159,7 +138,7 @@
             const { data: match } = await supabaseClient.from('matches').select('*').eq('id', matchId).single();
             const win = isP1 ? match.p1_score > match.p2_score : match.p2_score > match.p1_score;
             await supabaseClient.rpc('increment_tnv', { player_wallet: myAddress, amount: win ? 15 : 10 });
-            alert(win ? "JEET GAYE! +15 TNV" : "HAAR GAYE! +10 TNV");
+            alert(win ? "WINNER!" : "GAME OVER");
             location.reload();
         }
     </script>
