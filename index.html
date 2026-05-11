@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>TNV Duel Arena | Leaderboard & Sync</title>
+    <title>TNV Duel Arena | Final</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js"></script>
     <style>
@@ -36,7 +36,7 @@
         
         <div class="leaderboard">
             <h3 style="color: var(--tnv-green); margin-top: 0;">🏆 Top Players</h3>
-            <div id="leaderboard-list">Loading rankings...</div>
+            <div id="leaderboard-list">Loading...</div>
         </div>
     </div>
 
@@ -49,11 +49,10 @@
         <div class="scene" onclick="rollDice()">
             <div class="cube" id="dice-cube">
                 <div class="cube__face front">1</div><div class="cube__face back">6</div>
-                <div class="cube__face right">3</div><div class="cube__face left text">4</div>
+                <div class="cube__face right">3</div><div class="cube__face left">4</div>
                 <div class="cube__face top">2</div><div class="cube__face bottom">5</div>
             </div>
         </div>
-        <p>TAP FAST!</p>
     </div>
 
     <script>
@@ -61,7 +60,7 @@
         const SB_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVmbWthenlyeGxsY3l2Y3dtZXdkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg0ODYzMTMsImV4cCI6MjA5NDA2MjMxM30.PaKHyjZOkDCcyK0x7Qd1_DSSTS_ra5PYDuZwYIf5GyA";
         const supabaseClient = supabase.createClient(SB_URL, SB_KEY);
 
-        let myAddress, matchId, isP1, myScore = 0, gameActive = false, timeLeft = 30, pollInterval;
+        let myAddress, matchId, isP1, myScore = 0, gameActive = false, timeLeft = 30;
 
         window.onload = loadLeaderboard;
 
@@ -69,12 +68,9 @@
             const { data } = await supabaseClient.from('user_rewards').select('wallet_address, tnv_balance').order('tnv_balance', { ascending: false }).limit(5);
             if(data) {
                 let html = '';
-                data.forEach((user, index) => {
-                    const addr = user.wallet_address.substring(0,6) + "..." + user.wallet_address.slice(-4);
-                    html += `<div class="lb-row ${index === 0 ? 'rank-1' : ''}">
-                        <span>#${index+1} ${addr}</span>
-                        <span>${user.tnv_balance} TNV</span>
-                    </div>`;
+                data.forEach((u, i) => {
+                    const addr = u.wallet_address.substring(0,6) + "..." + u.wallet_address.slice(-4);
+                    html += `<div class="lb-row ${i === 0 ? 'rank-1' : ''}"><span>#${i+1} ${addr}</span><span>${u.tnv_balance} TNV</span></div>`;
                 });
                 document.getElementById('leaderboard-list').innerHTML = html;
             }
@@ -82,11 +78,10 @@
 
         async function initGame() {
             if (window.ethereum) {
-                const provider = new ethers.providers.Web3Provider(window.ethereum);
-                const accounts = await provider.send("eth_requestAccounts", []);
+                const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
                 myAddress = accounts[0];
             } else {
-                let guest = prompt("Naam daalein:");
+                let guest = prompt("Naam:");
                 myAddress = "GUEST_" + (guest || "USER").toUpperCase();
             }
             document.getElementById('start-btn').disabled = true;
@@ -101,41 +96,38 @@
 
         async function findMatch() {
             const { data: rooms } = await supabaseClient.from('matches').select('*').eq('status', 'waiting').is('player_2', null).neq('player_1', myAddress).limit(1);
+            
             if (rooms && rooms.length > 0) {
                 matchId = rooms[0].id; isP1 = false;
-                // Sync start time: Player 2 tells P1 exactly when they joined
                 await supabaseClient.from('matches').update({ player_2: myAddress, status: 'playing' }).eq('id', matchId);
             } else {
                 const { data: newMatch } = await supabaseClient.from('matches').insert([{ player_1: myAddress, status: 'waiting' }]).select();
                 matchId = newMatch[0].id; isP1 = true;
             }
-            startSync();
+            subscribe();
         }
 
-        function startSync() {
-            supabaseClient.channel(`m_${matchId}`).on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'matches', filter: `id=eq.${matchId}` }, (p) => {
-                handleUpdate(p.new);
-            }).subscribe();
-            pollInterval = setInterval(async () => {
+        function subscribe() {
+            // Backup check: Agar signal miss ho jaye toh har 1.5s mein check karega
+            const backupCheck = setInterval(async () => {
                 const { data } = await supabaseClient.from('matches').select('*').eq('id', matchId).single();
-                if(data) handleUpdate(data);
-            }, 1000);
-        }
+                if(data && data.status === 'playing' && !gameActive) startGame();
+                if(data) document.getElementById('opp-score').innerText = isP1 ? data.p2_score : data.p1_score;
+                if(data && data.status === 'finished' && gameActive) endGame();
+            }, 1500);
 
-        function handleUpdate(d) {
-            document.getElementById('opp-score').innerText = isP1 ? d.p2_score : d.p1_score;
-            // Agar status 'playing' ho jaye, toh 1 sec ruk ke start karein taaki network sync ho jaye
-            if (d.status === 'playing' && !gameActive) {
-                setTimeout(startGame, 500); 
-            }
-            if (d.status === 'finished' && gameActive) {
-                gameActive = false;
-                endGame();
-            }
+            supabaseClient.channel(`m_${matchId}`).on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'matches', filter: `id=eq.${matchId}` }, (p) => {
+                const d = p.new;
+                document.getElementById('opp-score').innerText = isP1 ? d.p2_score : d.p1_score;
+                if (d.status === 'playing' && !gameActive) {
+                    clearInterval(backupCheck);
+                    startGame();
+                }
+                if (d.status === 'finished' && gameActive) endGame();
+            }).subscribe();
         }
 
         function startGame() {
-            clearInterval(pollInterval);
             document.getElementById('setup-screen').style.display = 'none';
             document.getElementById('game-screen').style.display = 'block';
             gameActive = true;
@@ -151,27 +143,22 @@
             myScore += Math.floor(Math.random() * 6) + 1;
             document.getElementById('my-score').innerText = myScore;
             document.getElementById('dice-cube').style.transform = `rotateX(${Math.random()*360}deg) rotateY(${Math.random()*360}deg)`;
-            const updateData = isP1 ? { p1_score: myScore } : { p2_score: myScore };
-            await supabaseClient.from('matches').update(updateData).eq('id', matchId);
+            await supabaseClient.from('matches').update(isP1 ? { p1_score: myScore } : { p2_score: myScore }).eq('id', matchId);
         }
 
         async function endGame() {
-            if(!gameActive && timeLeft > 0) return;
-            gameActive = false;
+            if(!gameActive) return; gameActive = false;
             await supabaseClient.from('matches').update({ status: 'finished' }).eq('id', matchId);
-            
             setTimeout(async () => {
-                const { data: match } = await supabaseClient.from('matches').select('*').eq('id', matchId).single();
-                const myFinal = isP1 ? match.p1_score : match.p2_score;
-                const oppFinal = isP1 ? match.p2_score : match.p1_score;
-                const win = myFinal > oppFinal;
-                const tie = myFinal === oppFinal;
-                const reward = win ? 15 : (tie ? 12 : 10);
-
-                await supabaseClient.rpc('increment_tnv', { player_wallet: myAddress, amount: reward });
-                alert(`SCORE: ${myFinal} vs ${oppFinal}\nResult: ${win ? "WINNER!" : (tie ? "TIE!" : "LOST!")}`);
+                const { data: m } = await supabaseClient.from('matches').select('*').eq('id', matchId).single();
+                const myF = isP1 ? m.p1_score : m.p2_score;
+                const opF = isP1 ? m.p2_score : m.p1_score;
+                const win = myF > opF;
+                const tie = myF === opF;
+                await supabaseClient.rpc('increment_tnv', { player_wallet: myAddress, amount: win ? 15 : (tie ? 12 : 10) });
+                alert(`Result: ${win ? "WIN!" : (tie ? "TIE!" : "LOST!")}`);
                 location.reload();
-            }, 1200);
+            }, 1000);
         }
     </script>
 </body>
