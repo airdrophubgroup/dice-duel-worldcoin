@@ -3,28 +3,43 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>TNV Duel Arena | Final Fix</title>
+    <title>TNV Duel Arena | Absolute Sync</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@worldcoin/mini-app-sdk@0.1.0/dist/index.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/6.7.0/ethers.umd.min.js"></script>
     <style>
-        :root { --tnv: #00ff88; }
-        body { background: #121212; color: white; font-family: sans-serif; text-align: center; margin: 0; }
-        .header { padding: 15px; background: #1e1e1e; border-bottom: 2px solid var(--tnv); }
-        .btn { background: var(--tnv); color: black; border: none; padding: 20px 40px; font-size: 20px; border-radius: 15px; font-weight: bold; width: 85%; margin-top: 50px; cursor: pointer; }
-        #status { color: #888; font-size: 14px; margin-top: 15px; }
-        /* Game Screen CSS as per previous builds... */
+        :root { --tnv: #00ff88; --bg: #121212; }
+        body { background: var(--bg); color: white; font-family: sans-serif; text-align: center; margin: 0; }
+        .header { padding: 20px; background: #1e1e1e; border-bottom: 2px solid var(--tnv); }
+        .btn { background: var(--tnv); color: black; border: none; padding: 20px 40px; font-size: 22px; border-radius: 15px; font-weight: bold; width: 85%; margin-top: 50px; cursor: pointer; box-shadow: 0 0 20px rgba(0,255,136,0.3); }
+        #status-box { margin-top: 20px; padding: 15px; font-size: 14px; color: #aaa; }
+        .loader { width: 30px; height: 30px; border: 3px solid #333; border-top-color: var(--tnv); border-radius: 50%; animation: spin 1s linear infinite; display: none; margin: 10px auto; }
+        @keyframes spin { 100% { transform: rotate(360deg); } }
+        #game-screen { display: none; padding: 20px; }
+        .dice { font-size: 60px; margin: 30px; cursor: pointer; }
     </style>
 </head>
 <body>
 
     <div class="header">
         <h1>TNV Duel Arena🎲</h1>
-        <p>Nihal Vihar Special Build</p>
+        <p>Nihal Vihar Elite Build v3.0</p>
     </div>
 
     <div id="setup-screen">
-        <button class="btn" id="play-btn" onclick="secureConnect()">PLAY NOW</button>
-        <p id="status">Syncing with World App...</p>
+        <button class="btn" id="main-btn" onclick="masterConnect()">PLAY NOW</button>
+        <div id="status-box">
+            <div id="loader" class="loader"></div>
+            <p id="status-msg">Click to link your World Wallet</p>
+        </div>
+    </div>
+
+    <div id="game-screen">
+        <div style="display:flex; justify-content:space-around; font-size:20px;">
+            <div>ME: <span id="my-score">0</span></div>
+            <div id="timer" style="color:red; font-weight:bold;">30s</div>
+            <div>OPP: <span id="opp-score">0</span></div>
+        </div>
+        <div class="dice" onclick="rollDice()">🎲</div>
     </div>
 
     <script>
@@ -32,44 +47,81 @@
         const SB_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVmbWthenlyeGxsY3l2Y3dtZXdkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg0ODYzMTMsImV4cCI6MjA5NDA2MjMxM30.PaKHyjZOkDCcyK0x7Qd1_DSSTS_ra5PYDuZwYIf5GyA";
         const supabaseClient = supabase.createClient(SB_URL, SB_KEY);
 
-        let myAddress;
+        let myAddress, matchId, myScore = 0, gameActive = false;
 
-        // WORLDCOIN NATIVE CONNECTION
-        async function secureConnect() {
-            const status = document.getElementById('status');
-            const btn = document.getElementById('play-btn');
-            
-            btn.innerText = "LINKING...";
-            
+        async function masterConnect() {
+            const btn = document.getElementById('main-btn');
+            const msg = document.getElementById('status-msg');
+            const loader = document.getElementById('loader');
+
+            btn.disabled = true;
+            loader.style.display = "block";
+            msg.innerText = "Connecting to World Chain...";
+
             try {
-                // Method 1: Mini App Bridge (Standard for World App)
-                if (window.MiniApp) {
-                    myAddress = await window.MiniApp.getWalletAddress();
-                } 
+                // FORCE DETECTION: World App Bridge Check
+                let provider = window.ethereum;
                 
-                // Method 2: Injected Fallback
-                if (!myAddress && window.ethereum) {
-                    const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
+                if (!provider && window.parent) {
+                    provider = window.parent.ethereum;
+                }
+
+                if (!provider) {
+                    // World App internal detection retry
+                    await new Promise(r => setTimeout(r, 1000));
+                    provider = window.ethereum || (window.parent ? window.parent.ethereum : null);
+                }
+
+                if (provider) {
+                    const accounts = await provider.request({ method: 'eth_requestAccounts' });
                     myAddress = accounts[0];
-                }
-
-                if (myAddress) {
-                    status.innerText = "Wallet Linked: " + myAddress.slice(0,6);
-                    btn.innerText = "STARTING MATCH...";
-                    // Yahan se aapka matchmaking logic shuru hoga
-                    initMatchmaking(); 
+                    
+                    if (myAddress) {
+                        msg.innerText = "Wallet Linked! Finding Match...";
+                        startMatchmaking();
+                    }
                 } else {
-                    throw new Error("Wallet not found");
+                    throw new Error("No Wallet Detected");
                 }
-
             } catch (err) {
                 console.error(err);
-                status.innerText = "FAILED. Refresh and try again inside World App.";
-                btn.innerText = "RETRY PLAY NOW";
+                btn.disabled = false;
+                loader.style.display = "none";
+                msg.innerHTML = "<span style='color:#ff4444;'>Connection Failed.</span><br>1. Open World App<br>2. Go to 'Apps' tab<br>3. Search your App and open.";
             }
         }
 
-        // Matchmaking functions remain the same as before...
+        async function startMatchmaking() {
+            const { data, error } = await supabaseClient.rpc('join_or_create_match', { p_address: myAddress });
+            if (error) { alert("Matchmaking error!"); return; }
+            
+            matchId = data.match_id;
+            document.getElementById('setup-screen').style.display = "none";
+            document.getElementById('game-screen').style.display = "block";
+            gameActive = true;
+            startTimer();
+        }
+
+        function startTimer() {
+            let t = 30;
+            const iv = setInterval(() => {
+                t--;
+                document.getElementById('timer').innerText = t + "s";
+                if(t <= 0) { clearInterval(iv); finalize(); }
+            }, 1000);
+        }
+
+        function rollDice() {
+            if(!gameActive) return;
+            myScore += Math.floor(Math.random() * 6) + 1;
+            document.getElementById('my-score').innerText = myScore;
+        }
+
+        async function finalize() {
+            gameActive = false;
+            alert("Game Over! Your Score: " + myScore);
+            location.reload();
+        }
     </script>
 </body>
 </html>
