@@ -3,34 +3,21 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>TNV Duel Arena | Official World App Build</title>
+    <title>TNV Duel Arena | Verified Build</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@worldcoin/mini-app-sdk@0.1.0/dist/index.js"></script>
+    <script src="https://unpkg.com/@worldcoin/idkit"></script>
     <style>
         :root { --tnv: #00ff88; --gold: #ffd700; }
         body { background: #121212; color: white; font-family: 'Segoe UI', sans-serif; text-align: center; margin: 0; overflow: hidden; }
         .tnv-token { display: inline-block; width: 18px; height: 18px; background: linear-gradient(145deg, #cd7f32, #ffd700); border-radius: 50%; border: 1px solid #ffd700; vertical-align: middle; }
         .header { padding: 15px; background: #1e1e1e; border-bottom: 2px solid var(--tnv); }
-        .tnv-container { display: flex; align-items: center; justify-content: center; margin-top: 8px; }
-        .progress-bar { width: 60%; height: 8px; background: #333; border-radius: 4px; overflow: hidden; }
+        .progress-bar { width: 60%; height: 8px; background: #333; border-radius: 4px; margin: 10px auto; overflow: hidden; }
         .progress-fill { height: 100%; background: var(--tnv); width: 0%; transition: 0.5s; }
         .leaderboard-section { margin: 20px 10px; background: #1a1a1a; border-radius: 15px; border: 1px solid #333; overflow: hidden; }
-        .lb-header { background: #252525; padding: 12px; color: var(--tnv); font-weight: bold; border-bottom: 1px solid #333; }
         .lb-table { width: 100%; border-collapse: collapse; font-size: 11px; }
-        .lb-table th { padding: 10px; background: #222; color: #888; }
-        .lb-table td { padding: 12px 5px; border-bottom: 1px solid #222; }
+        .lb-table td, .lb-table th { padding: 10px; border-bottom: 1px solid #222; }
         .btn { background: var(--tnv); color: black; border: none; padding: 18px 30px; font-size: 18px; border-radius: 12px; font-weight: bold; width: 85%; cursor: pointer; }
         .btn:disabled { background: #444; color: #888; }
-        
-        /* Game Screen CSS */
-        .stats-box { display: flex; justify-content: space-around; padding: 15px; background: #252525; margin: 15px; border-radius: 15px; border: 1px solid #333; }
-        .scene { width: 100px; height: 100px; margin: 40px auto; perspective: 600px; }
-        .cube { width: 100%; height: 100%; position: relative; transform-style: preserve-3d; transition: transform 0.2s; cursor: pointer; }
-        .cube__face { position: absolute; width: 100px; height: 100px; border: 2px solid #333; line-height: 100px; font-size: 40px; background: white; color: black; border-radius: 10px; font-weight: bold; }
-        .front { transform: rotateY(0deg) translateZ(50px); } .back { transform: rotateY(180deg) translateZ(50px); }
-        .right { transform: rotateY(90deg) translateZ(50px); } .left { transform: rotateY(-90deg) translateZ(50px); }
-        .top { transform: rotateX(90deg) translateZ(50px); } .bottom { transform: rotateX(-90deg) translateZ(50px); }
-
         #waiting-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #121212; z-index: 1000; display: none; flex-direction: column; align-items: center; justify-content: center; }
         .spinner { width: 50px; height: 50px; border: 5px solid #333; border-top: 5px solid var(--tnv); border-radius: 50%; animation: spin 1s linear infinite; margin-bottom: 20px; }
         @keyframes spin { 100% { transform: rotate(360deg); } }
@@ -40,42 +27,32 @@
 
     <div id="waiting-overlay">
         <div class="spinner"></div>
-        <h2 id="wait-status">CONNECTING...</h2>
+        <h2 id="wait-status">SYNCING WITH WORLD CHAIN...</h2>
         <p id="match-timer" style="font-size: 24px; color: var(--tnv);">60s</p>
     </div>
 
     <div class="header">
         <h1>TNV Duel Arena🎲</h1>
-        <div class="tnv-container">
-            <div class="progress-bar"><div id="p-fill" class="progress-fill"></div></div>
-            <div style="margin-left:10px;"><span id="balance-num" style="font-weight:bold;">0</span> <span class="tnv-token"></span></div>
-        </div>
+        <div class="progress-bar"><div id="p-fill" class="progress-fill"></div></div>
+        <div>Balance: <span id="balance-num">0</span> <span class="tnv-token"></span></div>
     </div>
 
     <div id="setup-screen">
         <div style="padding: 20px;">
-            <button class="btn" id="start-btn" onclick="worldConnect()">PLAY NOW</button>
+            <button class="btn" id="start-btn" onclick="verifyAndPlay()">LOGIN WITH WORLD ID</button>
         </div>
         <div class="leaderboard-section">
-            <div class="lb-header">🏆 GLOBAL RANKINGS</div>
-            <table class="lb-table">
-                <thead><tr><th>Rank</th><th>Player</th><th>P</th><th>W</th><th>TNV</th></tr></thead>
-                <tbody id="leaderboard-body"></tbody>
-            </table>
+            <table class="lb-table"><tbody id="leaderboard-body"></tbody></table>
         </div>
     </div>
 
     <div id="game-screen" style="display:none;">
-        <div class="stats-box">
+        <div style="display:flex; justify-content:space-around; padding:20px; background:#252525;">
             <div>ME: <span id="my-score">0</span></div>
-            <div id="game-timer" style="color: #ff4444; font-weight: bold; font-size: 32px;">30s</div>
+            <div id="game-timer" style="color:#ff4444; font-size:24px; font-weight:bold;">30s</div>
             <div>OPP: <span id="opp-score">0</span></div>
         </div>
-        <div class="scene" onclick="rollDice()"><div class="cube" id="dice-cube">
-            <div class="cube__face front">1</div><div class="cube__face back">6</div>
-            <div class="cube__face right">3</div><div class="cube__face left">4</div>
-            <div class="cube__face top">2</div><div class="cube__face bottom">5</div>
-        </div></div>
+        <div style="margin:50px auto; width:100px; height:100px; background:white; color:black; font-size:40px; line-height:100px; border-radius:10px;" onclick="rollDice()">🎲</div>
     </div>
 
     <script>
@@ -83,144 +60,92 @@
         const SB_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVmbWthenlyeGxsY3l2Y3dtZXdkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg0ODYzMTMsImV4cCI6MjA5NDA2MjMxM30.PaKHyjZOkDCcyK0x7Qd1_DSSTS_ra5PYDuZwYIf5GyA";
         const supabaseClient = supabase.createClient(SB_URL, SB_KEY);
 
-        let myAddress, matchId, isP1, myScore = 0, oppScore = 0, gameActive = false, channel;
+        let myAddress, matchId, isP1, myScore = 0, gameActive = false;
 
         window.onload = loadLeaderboard;
 
-        // OFFICIAL WORLD APP NATIVE CONNECTION
-        async function worldConnect() {
-            const btn = document.getElementById('start-btn');
-            btn.disabled = true;
-            btn.innerText = "BRIDGE CONNECTING...";
-
-            try {
-                // Method 1: Try the Official Mini-App SDK (Standard for World App)
-                if (window.MiniApp) {
-                    const result = await window.MiniApp.getWalletAddress();
-                    if (result) myAddress = result;
-                }
-
-                // Method 2: Fallback to EIP-1193 with extra delay for Bridge
-                if (!myAddress && window.ethereum) {
-                    const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
-                    myAddress = accounts[0];
-                }
-
-                if (myAddress) {
-                    btn.innerText = "SUCCESS!";
+        async function verifyAndPlay() {
+            // World ID Verification - This triggers the native World App popup
+            IDKit.onSuccess = async (result) => {
+                console.log("Verified!");
+                if (window.ethereum) {
+                    const accs = await window.ethereum.request({ method: 'eth_requestAccounts' });
+                    myAddress = accs[0];
+                    document.getElementById('start-btn').innerText = "PLAY NOW";
                     loadRewards();
                     initMatchmaking();
-                } else {
-                    throw new Error("No Address");
                 }
-            } catch (err) {
-                console.error("Connection failed:", err);
-                btn.disabled = false;
-                btn.innerText = "PLAY NOW";
-                alert("Please open this game from the 'Apps' tab inside the World App.");
-            }
+            };
+
+            IDKit.init({
+                app_id: "app_staging_645d9476059c118747f480356264939b", // Yahan apni Portal ki ID dalo
+                action: "login",
+                onSuccess: IDKit.onSuccess,
+            });
+
+            IDKit.open();
         }
 
         async function initMatchmaking() {
             document.getElementById('waiting-overlay').style.display = 'flex';
-            let timeLeft = 60;
-            const mTimer = setInterval(() => {
-                timeLeft--;
-                document.getElementById('match-timer').innerText = timeLeft + "s";
-                if (timeLeft <= 0 || gameActive) { clearInterval(mTimer); if (!gameActive) location.reload(); }
-            }, 1000);
-
-            const { data, error } = await supabaseClient.rpc('join_or_create_match', { p_address: myAddress });
-            if (error) { alert("Matchmaking error."); location.reload(); return; }
-
+            const { data } = await supabaseClient.rpc('join_or_create_match', { p_address: myAddress });
             matchId = data.match_id; isP1 = data.is_p1;
 
-            channel = supabaseClient.channel(`room_${matchId}`, { config: { broadcast: { self: true } } });
-            channel.on('broadcast', { event: 'game_start' }, () => startSyncCountdown())
-                   .on('broadcast', { event: 'score_update' }, ({ payload }) => {
-                        if (payload.sender !== myAddress) {
-                            oppScore = payload.score;
-                            document.getElementById('opp-score').innerText = oppScore;
-                        }
-                   })
-                   .on('broadcast', { event: 'game_force_end' }, () => finalizeGame())
-                   .subscribe(async (status) => {
-                        if (status === 'SUBSCRIBED') {
-                            await supabaseClient.from('matches').update(isP1 ? { p1_ready: true } : { p2_ready: true }).eq('id', matchId);
-                            checkBothReady();
-                        }
-                   });
-        }
-
-        async function checkBothReady() {
-            const { data } = await supabaseClient.from('matches').select('p1_ready, p2_ready').eq('id', matchId).single();
-            if (data && data.p1_ready && data.p2_ready) {
-                channel.send({ type: 'broadcast', event: 'game_start' });
-            } else { setTimeout(checkBothReady, 1000); }
-        }
-
-        function startSyncCountdown() {
-            if (gameActive) return;
-            gameActive = true;
-            let cd = 3;
-            const t = setInterval(() => {
-                document.getElementById('wait-status').innerText = `STARTING IN ${cd}...`;
-                cd--;
-                if (cd < 0) {
-                    clearInterval(t);
-                    document.getElementById('waiting-overlay').style.display = 'none';
-                    document.getElementById('setup-screen').style.display = 'none';
-                    document.getElementById('game-screen').style.display = 'block';
-                    runTimer();
+            const channel = supabaseClient.channel(`m_${matchId}`, { config: { broadcast: { self: true } } });
+            channel.on('broadcast', { event: 'game_start' }, () => {
+                document.getElementById('waiting-overlay').style.display = 'none';
+                document.getElementById('setup-screen').style.display = 'none';
+                document.getElementById('game-screen').style.display = 'block';
+                gameActive = true;
+                startTimer();
+            }).on('broadcast', { event: 'score' }, ({payload}) => {
+                if(payload.addr !== myAddress) document.getElementById('opp-score').innerText = payload.val;
+            }).subscribe(async (status) => {
+                if(status === 'SUBSCRIBED') {
+                    await supabaseClient.from('matches').update(isP1 ? {p1_ready:true} : {p2_ready:true}).eq('id', matchId);
+                    checkReady(channel);
                 }
-            }, 1000);
+            });
         }
 
-        function runTimer() {
-            let gTime = 30;
-            const t = setInterval(() => {
-                gTime--;
-                document.getElementById('game-timer').innerText = gTime + "s";
-                if (gTime <= 0) { clearInterval(t); channel.send({ type: 'broadcast', event: 'game_force_end' }); }
+        async function checkReady(ch) {
+            const { data } = await supabaseClient.from('matches').select('p1_ready, p2_ready').eq('id', matchId).single();
+            if(data.p1_ready && data.p2_ready) ch.send({type:'broadcast', event:'game_start'});
+            else setTimeout(() => checkReady(ch), 1000);
+        }
+
+        function startTimer() {
+            let t = 30;
+            const iv = setInterval(() => {
+                t--; document.getElementById('game-timer').innerText = t+"s";
+                if(t <= 0) { clearInterval(iv); finalize(); }
             }, 1000);
         }
 
         async function rollDice() {
-            if (!gameActive || document.getElementById('game-timer').innerText === "0s") return;
-            myScore += Math.floor(Math.random() * 6) + 1;
+            if(!gameActive) return;
+            myScore += Math.floor(Math.random()*6)+1;
             document.getElementById('my-score').innerText = myScore;
-            document.getElementById('dice-cube').style.transform = `rotateX(${Math.random()*360}deg) rotateY(${Math.random()*360}deg)`;
-            channel.send({ type: 'broadcast', event: 'score_update', payload: { sender: myAddress, score: myScore } });
-            await supabaseClient.from('matches').update(isP1 ? { p1_score: myScore } : { p2_score: myScore }).eq('id', matchId);
+            supabaseClient.channel(`m_${matchId}`).send({type:'broadcast', event:'score', payload:{addr:myAddress, val:myScore}});
         }
 
-        async function finalizeGame() {
+        async function finalize() {
             gameActive = false;
-            const { data: m } = await supabaseClient.from('matches').select('*').eq('id', matchId).single();
-            const win = isP1 ? m.p1_score > m.p2_score : m.p2_score > m.p1_score;
-            try {
-                const { data: u } = await supabaseClient.from('user_rewards').select('games_played, games_won').eq('wallet_address', myAddress).single();
-                await supabaseClient.from('user_rewards').update({
-                    games_played: (u ? u.games_played : 0) + 1,
-                    games_won: win ? ((u ? u.games_won : 0) + 1) : (u ? u.games_won : 0)
-                }).eq('wallet_address', myAddress);
-                await supabaseClient.rpc('increment_tnv', { player_wallet: myAddress, amount: win ? 15 : 10 });
-            } catch (e) {}
-            alert(win ? "VICTORY! +15 TNV" : "GAME OVER! +10 TNV");
+            const { data } = await supabaseClient.from('matches').select('*').eq('id', matchId).single();
+            const win = isP1 ? data.p1_score > data.p2_score : data.p2_score > data.p1_score;
+            await supabaseClient.rpc('increment_tnv', { player_wallet: myAddress, amount: win ? 15 : 10 });
+            alert(win ? "WON!" : "LOST!");
             location.reload();
         }
 
         async function loadLeaderboard() {
-            const { data } = await supabaseClient.from('user_rewards').select('*').order('tnv_balance', { ascending: false }).limit(10);
-            if(data) document.getElementById('leaderboard-body').innerHTML = data.map((u, i) => `<tr><td>#${i+1}</td><td>${u.wallet_address.slice(0,6)}...</td><td>${u.games_played || 0}</td><td>${u.games_won || 0}</td><td>${u.tnv_balance} <span class="tnv-token"></span></td></tr>`).join('');
+            const { data } = await supabaseClient.from('user_rewards').select('*').order('tnv_balance', { ascending: false }).limit(5);
+            if(data) document.getElementById('leaderboard-body').innerHTML = data.map((u,i)=>`<tr><td>#${i+1}</td><td>${u.wallet_address.slice(0,6)}</td><td>${u.tnv_balance}</td></tr>`).join('');
         }
 
         async function loadRewards() {
             const { data } = await supabaseClient.from('user_rewards').select('tnv_balance').eq('wallet_address', myAddress).single();
-            if(data) {
-                document.getElementById('balance-num').innerText = data.tnv_balance;
-                document.getElementById('p-fill').style.width = Math.min((data.tnv_balance / 500 * 100), 100) + "%";
-            }
+            if(data) document.getElementById('balance-num').innerText = data.tnv_balance;
         }
     </script>
 </body>
