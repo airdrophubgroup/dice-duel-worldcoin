@@ -3,14 +3,13 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>TNV Duel Arena | Final Pro Build</title>
+    <title>TNV Duel Arena | Final Stable Build</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js"></script>
     <style>
         :root { --tnv: #00ff88; --gold: #ffd700; }
         body { background: #121212; color: white; font-family: 'Segoe UI', sans-serif; text-align: center; margin: 0; overflow-x: hidden; }
         
-        /* Realistic Coin Symbol */
         .tnv-token {
             display: inline-block; width: 18px; height: 18px;
             background: linear-gradient(145deg, #cd7f32, #ffd700);
@@ -24,7 +23,6 @@
         .progress-bar { width: 60%; height: 8px; background: #333; border-radius: 4px; overflow: hidden; }
         .progress-fill { height: 100%; background: var(--tnv); width: 0%; transition: 0.5s; }
 
-        /* Leaderboard Style */
         .leaderboard-section { margin: 25px 10px; background: #1a1a1a; border-radius: 15px; border: 1px solid #333; overflow: hidden; }
         .lb-header { background: #252525; padding: 12px; color: var(--tnv); font-weight: bold; border-bottom: 1px solid #333; }
         .lb-table { width: 100%; border-collapse: collapse; font-size: 12px; }
@@ -77,7 +75,7 @@
                     <tr><th>Rank</th><th>Player</th><th>Played</th><th>Won</th><th>TNV</th></tr>
                 </thead>
                 <tbody id="leaderboard-body">
-                    <tr><td colspan="5">Loading...</td></tr>
+                    <tr><td colspan="5">Loading Rankings...</td></tr>
                 </tbody>
             </table>
         </div>
@@ -101,7 +99,7 @@
         const SB_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVmbWthenlyeGxsY3l2Y3dtZXdkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg0ODYzMTMsImV4cCI6MjA5NDA2MjMxM30.PaKHyjZOkDCcyK0x7Qd1_DSSTS_ra5PYDuZwYIf5GyA";
         const supabaseClient = supabase.createClient(SB_URL, SB_KEY);
 
-        let myAddress, matchId, isP1, myScore = 0, gameActive = false, timeLeft = 30;
+        let myAddress, matchId, isP1, myScore = 0, gameActive = false, timeLeft = 30, syncInterval;
 
         window.onload = loadLeaderboard;
 
@@ -135,14 +133,14 @@
             matchId = data.match_id;
             isP1 = data.is_p1;
             
-            const syncInterval = setInterval(async () => {
-                const { data } = await supabaseClient.from('matches').select('*').eq('id', matchId).single();
-                if(data) {
-                    document.getElementById('opp-score').innerText = isP1 ? data.p2_score : data.p1_score;
-                    if(data.status === 'playing' && !gameActive) startGame();
-                    if(data.status === 'finished' && gameActive) {
+            syncInterval = setInterval(async () => {
+                const { data: mData } = await supabaseClient.from('matches').select('*').eq('id', matchId).single();
+                if(mData) {
+                    document.getElementById('opp-score').innerText = isP1 ? mData.p2_score : mData.p1_score;
+                    if(mData.status === 'playing' && !gameActive) startGame();
+                    if(mData.status === 'finished') {
                         clearInterval(syncInterval);
-                        endGame();
+                        forceEnd(); 
                     }
                 }
             }, 1000);
@@ -165,9 +163,10 @@
                 document.getElementById('game-screen').style.display = 'block';
                 makeCoinsFall(15);
                 const timer = setInterval(() => {
+                    if(!gameActive) { clearInterval(timer); return; }
                     timeLeft--;
                     document.getElementById('timer').innerText = timeLeft + "s";
-                    if(timeLeft <= 0) { clearInterval(timer); if(gameActive) endGame(); }
+                    if(timeLeft <= 0) { clearInterval(timer); endGame(); }
                 }, 1000);
             }, 3000);
         }
@@ -181,18 +180,23 @@
         }
 
         async function endGame() {
-            if(!gameActive) return; gameActive = false;
+            if(!gameActive) return;
+            gameActive = false;
             await supabaseClient.from('matches').update({ status: 'finished' }).eq('id', matchId);
+        }
+
+        async function forceEnd() {
+            gameActive = false;
             makeCoinsFall(10);
             setTimeout(async () => {
-                const { data: m } = await supabaseClient.from('matches').select('*').eq('id', matchId).single();
-                const win = isP1 ? m.p1_score > m.p2_score : m.p2_score > m.p1_score;
+                const { data: finalM } = await supabaseClient.from('matches').select('*').eq('id', matchId).single();
+                const win = isP1 ? finalM.p1_score > finalM.p2_score : finalM.p2_score > finalM.p1_score;
 
-                // Simple Stats Update
-                const { data: cur } = await supabaseClient.from('user_rewards').select('games_played, games_won').eq('wallet_address', myAddress).single();
+                const { data: curStat } = await supabaseClient.from('user_rewards').select('games_played, games_won').eq('wallet_address', myAddress).single();
+                
                 await supabaseClient.from('user_rewards').update({ 
-                    games_played: (cur.games_played || 0) + 1,
-                    games_won: win ? (cur.games_won || 0) + 1 : (cur.games_won || 0)
+                    games_played: (curStat.games_played || 0) + 1,
+                    games_won: win ? (curStat.games_won || 0) + 1 : (curStat.games_won || 0)
                 }).eq('wallet_address', myAddress);
                 
                 await supabaseClient.rpc('increment_tnv', { player_wallet: myAddress, amount: win ? 15 : 10 });
