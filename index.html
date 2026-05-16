@@ -63,7 +63,7 @@
         const SB_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVmbWthenlyeGxsY3l2Y3dtZXdkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg0ODYzMTMsImV4cCI6MjA5NDA2MjMxM30.PaKHyjZOkDCcyK0x7Qd1_DSSTS_ra5PYDuZwYIf5GyA";
         const supabaseClient = supabase.createClient(SB_URL, SB_KEY);
 
-        let myAddress, matchId, isP1, myScore = 0, oppScore = 0, gameActive = false, matchmakingActive = false, channel;
+        let myAddress, matchId, isP1, myScore = 0, oppScore = 0, gameActive = false, matchmakingActive = false, channel, mTimer;
 
         async function initMatchmaking() {
             if (matchmakingActive) return;
@@ -71,61 +71,91 @@
             const btn = document.getElementById('start-btn');
             btn.disabled = true;
             document.getElementById('waiting-overlay').style.display = 'flex';
+            document.getElementById('wait-status').innerText = "SEARCHING FOR OPPONENT...";
 
             if (window.ethereum) {
-                const accs = await window.ethereum.request({ method: 'eth_requestAccounts' });
-                myAddress = accs[0];
+                try {
+                    const accs = await window.ethereum.request({ method: 'eth_requestAccounts' });
+                    myAddress = accs[0];
+                } catch(e) {
+                    myAddress = "GUEST_" + Math.floor(Math.random()*1000);
+                }
             } else { myAddress = "GUEST_" + Math.floor(Math.random()*1000); }
 
             // 60s Waiting Logic
             let timeLeft = 60;
-            const mTimer = setInterval(() => {
+            document.getElementById('match-timer').innerText = timeLeft + "s";
+            mTimer = setInterval(() => {
                 timeLeft--;
                 document.getElementById('match-timer').innerText = timeLeft + "s";
-                if (timeLeft <= 0 || gameActive) {
+                if (timeLeft <= 0) {
                     clearInterval(mTimer);
-                    if (!gameActive) resetToHome();
+                    if (!gameActive) {
+                        alert("No opponent found. Please try again!");
+                        resetToHome();
+                    }
                 }
             }, 1000);
 
-            const { data } = await supabaseClient.rpc('join_or_create_match', { p_address: myAddress });
-            matchId = data.match_id; isP1 = data.is_p1;
+            try {
+                const { data, error } = await supabaseClient.rpc('join_or_create_match', { p_address: myAddress });
+                if (error || !data) {
+                    resetToHome();
+                    return;
+                }
+                matchId = data.match_id; 
+                isP1 = data.is_p1;
 
-            // Broadcast Channel for Instant Sync
-            channel = supabaseClient.channel(`room_${matchId}`, { config: { broadcast: { self: true } } });
+                // { self: true } को हटा दिया गया है ताकि खुद का भेजा ब्रॉडकास्ट खुद को ट्रिगर न करे
+                channel = supabaseClient.channel(`room_${matchId}`, { config: { broadcast: { self: true } } });
 
-            channel.on('broadcast', { event: 'game_start' }, () => startSyncCountdown())
-                   .on('broadcast', { event: 'score_update' }, ({ payload }) => {
+                channel.on('broadcast', { event: 'game_start' }, () => {
+                        clearInterval(mTimer); // टाइमर रोकें
+                        startSyncCountdown();
+                    })
+                    .on('broadcast', { event: 'score_update' }, ({ payload }) => {
                         if (payload.sender !== myAddress) {
                             oppScore = payload.score;
                             document.getElementById('opp-score').innerText = oppScore;
                         }
-                   })
-                   .on('broadcast', { event: 'game_force_end' }, () => finalizeGame())
-                   .subscribe(async (status) => {
+                    })
+                    .on('broadcast', { event: 'game_force_end' }, () => finalizeGame())
+                    .subscribe(async (status) => {
                         if (status === 'SUBSCRIBED') {
+                            // डेटाबेस में प्लेयर की उपस्थिति दर्ज करें
                             await supabaseClient.from('matches').update(isP1 ? { p1_ready: true } : { p2_ready: true }).eq('id', matchId);
                             checkBothReady();
                         }
-                   });
+                    });
+            } catch (err) {
+                resetToHome();
+            }
         }
 
         async function checkBothReady() {
-            const { data } = await supabaseClient.from('matches').select('p1_ready, p2_ready').eq('id', matchId).single();
-            if (data.p1_ready && data.p2_ready) {
+            if (!matchmakingActive || gameActive) return;
+
+            const { data, error } = await supabaseClient.from('matches').select('p1_address, p2_address, p1_ready, p2_ready').eq('id', matchId).single();
+            
+            if (error || !data) return;
+
+            // सबसे महत्वपूर्ण चेक: सुनिश्चित करें कि दोनों प्लेयर के एड्रेस मौजूद हैं (यानी लाइव विरोधी मिल चुका है)
+            if (data.p1_address && data.p2_address && data.p1_ready && data.p2_ready) {
                 channel.send({ type: 'broadcast', event: 'game_start' });
             } else {
-                setTimeout(checkBothReady, 1000); // Check every second until both are in
+                // अगर अभी भी कोई एक प्लेयर मौजूद नहीं है, तो 1.5 सेकंड बाद फिर से चेक करें
+                setTimeout(checkBothReady, 1500);
             }
         }
 
         function startSyncCountdown() {
             if (gameActive) return;
             gameActive = true;
+            clearInterval(mTimer); // सुरक्षा के लिए मैचमेकिंग टाइमर को यहाँ भी क्लियर किया गया है
             let cd = 3;
             const loader = document.getElementById('wait-status');
             const timer = setInterval(() => {
-                loader.innerText = `STARTING IN ${cd}...`;
+                loader.innerText = `OPPONENT FOUND! STARTING IN ${cd}...`;
                 cd--;
                 if (cd < 0) {
                     clearInterval(timer);
@@ -144,7 +174,9 @@
                 document.getElementById('game-timer').innerText = gTime + "s";
                 if (gTime <= 0) {
                     clearInterval(t);
-                    channel.send({ type: 'broadcast', event: 'game_force_end' });
+                    if(isP1) { // दोनों तरफ से भेजने के बजाय सिर्फ P1 एंड गेम ब्रॉडकास्ट करे
+                        channel.send({ type: 'broadcast', event: 'game_force_end' });
+                    }
                 }
             }, 1000);
         }
@@ -155,29 +187,41 @@
             document.getElementById('my-score').innerText = myScore;
             document.getElementById('dice-cube').style.transform = `rotateX(${Math.random()*360}deg) rotateY(${Math.random()*360}deg)`;
             
-            // Instant score broadcast
             channel.send({ type: 'broadcast', event: 'score_update', payload: { sender: myAddress, score: myScore } });
-            // DB backup
             await supabaseClient.from('matches').update(isP1 ? { p1_score: myScore } : { p2_score: myScore }).eq('id', matchId);
         }
 
         async function finalizeGame() {
+            if (!gameActive) return;
             gameActive = false;
             const { data: m } = await supabaseClient.from('matches').select('*').eq('id', matchId).single();
             const myFinal = isP1 ? m.p1_score : m.p2_score;
             const opFinal = isP1 ? m.p2_score : m.p1_score;
-            const win = myFinal > opFinal;
-
-            await supabaseClient.rpc('increment_tnv', { player_wallet: myAddress, amount: win ? 15 : 10 });
-            alert(win ? "VICTORY! +15 TNV" : "GAME OVER! +10 TNV");
-            location.reload(); // Reset to Home
+            
+            let msg = "GAME OVER!";
+            if (myFinal > opFinal) {
+                msg = "VICTORY! +15 TNV";
+                await supabaseClient.rpc('increment_tnv', { player_wallet: myAddress, amount: 15 });
+            } else if (myFinal < opFinal) {
+                msg = "DEFEAT! +10 TNV";
+                await supabaseClient.rpc('increment_tnv', { player_wallet: myAddress, amount: 10 });
+            } else {
+                msg = "TIE! +10 TNV";
+                await supabaseClient.rpc('increment_tnv', { player_wallet: myAddress, amount: 10 });
+            }
+            
+            alert(msg);
+            location.reload();
         }
 
         function resetToHome() {
+            clearInterval(mTimer);
+            if(channel) channel.unsubscribe();
             document.getElementById('waiting-overlay').style.display = 'none';
             document.getElementById('start-btn').disabled = false;
-            document.getElementById('start-btn').innerText = "TRY AGAIN (NO OPPONENT)";
+            document.getElementById('start-btn').innerText = "PLAY NOW (0.5 WLD)";
             matchmakingActive = false;
+            gameActive = false;
         }
     </script>
 </body>
