@@ -1,235 +1,183 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="hi">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0">
-    <title>TOFFEENVH - All-in-One</title>
-    <script src="https://cdn.tailwindcss.com"></script>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TNV Duel Arena | Absolute Master Sync</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
-        body { background: #030712; color: white; font-family: sans-serif; }
-        .glass { background: rgba(30, 41, 59, 0.5); backdrop-filter: blur(10px); border: 1px solid rgba(56, 189, 248, 0.2); }
-        .tab-btn.active { border-bottom: 3px solid #38bdf8; color: #38bdf8; }
-        #gameArea, #waitingScreen { display: none; }
-        .dice-btn { font-size: 60px; cursor: pointer; transition: 0.1s; display: inline-block; }
-        .dice-btn:active { transform: scale(0.85); }
+        :root { --tnv: #00ff88; --gold: #ffd700; }
+        body { background: #121212; color: white; font-family: 'Segoe UI', sans-serif; text-align: center; margin: 0; overflow: hidden; }
+        .tnv-token { display: inline-block; width: 18px; height: 18px; background: linear-gradient(145deg, #cd7f32, #ffd700); border-radius: 50%; border: 1px solid #ffd700; vertical-align: middle; }
+        .header { padding: 15px; background: #1e1e1e; border-bottom: 2px solid var(--tnv); }
+        .progress-bar { width: 60%; height: 8px; background: #333; border-radius: 4px; margin: 10px auto; overflow: hidden; }
+        .progress-fill { height: 100%; background: var(--tnv); width: 0%; transition: 0.5s; }
+        .stats-box { display: flex; justify-content: space-around; padding: 15px; background: #252525; margin: 15px; border-radius: 15px; border: 1px solid #333; }
+        .scene { width: 100px; height: 100px; margin: 40px auto; perspective: 600px; }
+        .cube { width: 100%; height: 100%; position: relative; transform-style: preserve-3d; transition: transform 0.2s; cursor: pointer; }
+        .cube__face { position: absolute; width: 100px; height: 100px; border: 2px solid #333; line-height: 100px; font-size: 40px; background: white; color: black; border-radius: 10px; font-weight: bold; }
+        .front { transform: rotateY(0deg) translateZ(50px); } .back { transform: rotateY(180deg) translateZ(50px); }
+        .right { transform: rotateY(90deg) translateZ(50px); } .left { transform: rotateY(-90deg) translateZ(50px); }
+        .top { transform: rotateX(90deg) translateZ(50px); } .bottom { transform: rotateX(-90deg) translateZ(50px); }
+        .btn { background: var(--tnv); color: black; border: none; padding: 18px 30px; font-size: 18px; border-radius: 12px; font-weight: bold; width: 85%; cursor: pointer; }
+        .btn:disabled { background: #444; color: #888; }
+        #waiting-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #121212; z-index: 1000; display: none; flex-direction: column; align-items: center; justify-content: center; }
+        .spinner { width: 50px; height: 50px; border: 5px solid #333; border-top: 5px solid var(--tnv); border-radius: 50%; animation: spin 1s linear infinite; margin-bottom: 20px; }
+        @keyframes spin { 100% { transform: rotate(360deg); } }
     </style>
 </head>
-<body class="pb-24">
+<body>
 
-    <nav class="p-4 border-b border-slate-800 flex justify-between items-center sticky top-0 bg-slate-950/90 z-50">
-        <div class="flex items-center space-x-2">
-            <div class="w-8 h-8 bg-sky-500 rounded-full flex items-center justify-center font-bold text-black text-xs">TNV</div>
-            <span class="font-black uppercase tracking-widest text-sm">Toffeenvh</span>
+    <div id="waiting-overlay">
+        <div class="spinner"></div>
+        <h2 id="wait-status">SEARCHING FOR OPPONENT...</h2>
+        <p id="match-timer" style="font-size: 24px; color: var(--tnv);">60s</p>
+    </div>
+
+    <div class="header">
+        <h1>TNV Duel Arena🎲</h1>
+        <div class="progress-bar"><div id="p-fill" class="progress-fill"></div></div>
+        <div id="balance-area">Balance: <span id="balance-num">0</span> <span class="tnv-token"></span></div>
+    </div>
+
+    <div id="setup-screen" style="padding-top: 50px;">
+        <button class="btn" id="start-btn" onclick="initMatchmaking()">PLAY NOW (0.5 WLD)</button>
+        <div id="lb-container" style="margin-top:30px; font-size:12px;"></div>
+    </div>
+
+    <div id="game-screen" style="display:none;">
+        <div class="stats-box">
+            <div>ME: <span id="my-score">0</span></div>
+            <div id="game-timer" style="color: #ff4444; font-weight: bold; font-size: 32px;">30s</div>
+            <div>OPP: <span id="opp-score">0</span></div>
         </div>
-        <button id="walletBtn" onclick="connectWallet()" class="bg-sky-500 text-black px-4 py-1.5 rounded-lg font-bold text-xs">CONNECT</button>
-        <div id="userTag" class="hidden text-sky-400 font-bold text-xs"></div>
-    </nav>
-
-    <div id="mainContainer" class="p-4 max-w-md mx-auto">
-        
-        <div class="flex justify-around border-b border-slate-800 mb-6 text-xs font-bold text-slate-500">
-            <button onclick="switchTab('game')" id="tab-game" class="tab-btn active py-3 px-2">DUEL</button>
-            <button onclick="switchTab('store')" id="tab-store" class="tab-btn py-3 px-2">STORE</button>
-            <button onclick="switchTab('info')" id="tab-info" class="tab-btn py-3 px-2">INFO</button>
-        </div>
-
-        <div id="section-game" class="tab-content">
-            <div class="glass p-6 rounded-3xl text-center mb-6">
-                <p class="text-slate-400 text-[10px] uppercase mb-1">Balance</p>
-                <h2 id="balText" class="text-4xl font-black mb-1">0.00</h2>
-                <p class="text-sky-400 text-[10px] font-bold">$TOFFEE</p>
-            </div>
-
-            <div class="glass p-6 rounded-3xl text-center border-amber-500/20">
-                <h3 class="text-amber-500 font-black text-xs mb-4 italic uppercase">⚔️ PvP Dice Duel</h3>
-                
-                <div id="gameLobby">
-                    <p class="text-[10px] text-slate-400 mb-4">Fee: 5 TOFFEE | Win: 8.5 TOFFEE</p>
-                    <button onclick="startMatchmaking()" class="w-full bg-amber-500 text-black py-4 rounded-2xl font-black shadow-lg shadow-amber-500/20">FIND OPPONENT</button>
-                </div>
-
-                <div id="waitingScreen" class="py-10">
-                    <div class="w-10 h-10 border-4 border-amber-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-                    <p class="font-bold text-sm">Searching Player...</p>
-                    <p id="searchTimer" class="text-amber-500 font-black text-xl">60s</p>
-                </div>
-
-                <div id="gameArea">
-                    <div class="flex justify-between items-center mb-8">
-                        <div class="text-left"><p class="text-[10px] text-sky-400 font-bold">ME</p><p id="myScore" class="text-4xl font-black">0</p></div>
-                        <p id="battleTimer" class="text-2xl font-black text-red-500 italic">30s</p>
-                        <div class="text-right"><p id="p2Name" class="text-[10px] text-slate-500 font-bold uppercase italic">WAIT</p><p id="oppScore" class="text-4xl font-black text-slate-500">0</p></div>
-                    </div>
-                    <div class="dice-btn" onclick="rollDicePVP()">🎲</div>
-                </div>
-            </div>
-
-            <div class="mt-6 space-y-3">
-                <input type="text" id="codeInput" class="w-full bg-black border border-slate-700 p-4 rounded-xl text-center font-bold" placeholder="ENTER CODE">
-                <button onclick="processClaim()" class="w-full bg-sky-500 text-black py-4 rounded-xl font-black uppercase">Claim Reward</button>
-            </div>
-        </div>
-
-        <div id="section-store" class="tab-content hidden space-y-4">
-            <h2 class="text-xl font-black italic mb-4">REWARD STORE</h2>
-            <div class="glass p-4 rounded-2xl flex justify-between items-center">
-                <div><p class="font-bold">Boat Neckband</p><p class="text-xs text-sky-400 italic">500 TOFFEE</p></div>
-                <button class="bg-slate-700 px-4 py-2 rounded-lg text-xs font-bold">REDEEM</button>
-            </div>
-            <div class="glass p-4 rounded-2xl flex justify-between items-center">
-                <div><p class="font-bold">Gaming Mouse</p><p class="text-xs text-sky-400 italic">300 TOFFEE</p></div>
-                <button class="bg-slate-700 px-4 py-2 rounded-lg text-xs font-bold">REDEEM</button>
-            </div>
-            <p class="text-center text-[10px] text-slate-500 uppercase py-10 italic">More rewards coming soon...</p>
-        </div>
-
-        <div id="section-info" class="tab-content hidden space-y-6">
-            <div class="glass p-6 rounded-3xl">
-                <h3 class="font-black text-sky-400 mb-2">PROJECT MAP</h3>
-                <p class="text-xs text-slate-300 leading-relaxed">Phase 1: Token Launch in Nihal Vihar<br>Phase 2: PvP Dice Games (LIVE)<br>Phase 3: Physical Rewards Integration</p>
-            </div>
-            <div class="glass p-6 rounded-3xl">
-                <h3 class="font-black text-sky-400 mb-2">FAQ</h3>
-                <details class="text-xs text-slate-400 mb-2">
-                    <summary class="cursor-pointer text-slate-200 font-bold mb-1">How to earn?</summary>
-                    Buy Toffee wrappers with codes or win Dice Duel.
-                </details>
-                <details class="text-xs text-slate-400">
-                    <summary class="cursor-pointer text-slate-200 font-bold mb-1">Is it real?</summary>
-                    Yes, deployed on Celo/World Chain.
-                </details>
-            </div>
-            <div class="flex space-x-4">
-                <a href="https://wa.me/YOUR_NUMBER" class="flex-1 bg-green-600 p-4 rounded-2xl text-center font-bold text-xs"><i class="fab fa-whatsapp mb-1 text-lg"></i><br>WHATSAPP</a>
-                <a href="#" class="flex-1 bg-sky-600 p-4 rounded-2xl text-center font-bold text-xs"><i class="fab fa-telegram mb-1 text-lg"></i><br>CHANNEL</a>
-            </div>
-        </div>
+        <div class="scene" onclick="rollDice()"><div class="cube" id="dice-cube">
+            <div class="cube__face front">1</div><div class="cube__face back">6</div>
+            <div class="cube__face right">3</div><div class="cube__face left">4</div>
+            <div class="cube__face top">2</div><div class="cube__face bottom">5</div>
+        </div></div>
     </div>
 
     <script>
-        const SB_URL = 'https://xshsfgyfbbnommuhvwat.supabase.co';
-        const SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhzaHNmZ3lmYmJub21tdWh2d2F0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM5OTA4OTYsImV4cCI6MjA4OTU2Njg5Nn0.bv_tP_jH74wzDz99tFBYlcaaZRPqmIkXnYvI_aUbKpo';
-        const db = supabase.createClient(SB_URL, SB_KEY);
+        const SB_URL = "https://efmkazyrxllcyvcwmewd.supabase.co";
+        const SB_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVmbWthenlyeGxsY3l2Y3dtZXdkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg0ODYzMTMsImV4cCI6MjA5NDA2MjMxM30.PaKHyjZOkDCcyK0x7Qd1_DSSTS_ra5PYDuZwYIf5GyA";
+        const supabaseClient = supabase.createClient(SB_URL, SB_KEY);
 
-        let userWallet = ""; let userBalance = 0; let currentUsername = "";
-        let matchId = null; let channel = null;
-        let myCurrentScore = 0; let oppCurrentScore = 0; let duelActive = false;
+        let myAddress, matchId, isP1, myScore = 0, oppScore = 0, gameActive = false, matchmakingActive = false, channel;
 
-        function switchTab(tab) {
-            document.querySelectorAll('.tab-content').forEach(c => c.classList.add('hidden'));
-            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-            document.getElementById(`section-${tab}`).classList.remove('hidden');
-            document.getElementById(`tab-${tab}`).classList.add('active');
-        }
+        async function initMatchmaking() {
+            if (matchmakingActive) return;
+            matchmakingActive = true;
+            const btn = document.getElementById('start-btn');
+            btn.disabled = true;
+            document.getElementById('waiting-overlay').style.display = 'flex';
 
-        async function connectWallet() {
             if (window.ethereum) {
                 const accs = await window.ethereum.request({ method: 'eth_requestAccounts' });
-                userWallet = accs[0].toLowerCase();
-                const { data } = await db.from('user_balances').select('*').eq('wallet_address', userWallet).maybeSingle();
-                
-                if (data && data.username) {
-                    currentUsername = data.username;
-                    document.getElementById("userTag").innerText = `@${currentUsername}`;
-                    document.getElementById("userTag").classList.remove('hidden');
-                    document.getElementById("walletBtn").classList.add('hidden');
-                    refreshBalance();
-                } else {
-                    const nick = prompt("Enter Nihal Vihar ID Name:");
-                    if(nick) {
-                        await db.from('user_balances').upsert({ wallet_address: userWallet, username: nick.toUpperCase(), pending_balance: 0 });
-                        location.reload();
-                    }
+                myAddress = accs[0];
+            } else { myAddress = "GUEST_" + Math.floor(Math.random()*1000); }
+
+            // 60s Waiting Logic
+            let timeLeft = 60;
+            const mTimer = setInterval(() => {
+                timeLeft--;
+                document.getElementById('match-timer').innerText = timeLeft + "s";
+                if (timeLeft <= 0 || gameActive) {
+                    clearInterval(mTimer);
+                    if (!gameActive) resetToHome();
                 }
-            } else { alert("Please use MetaMask/TrustWallet browser."); }
-        }
-
-        async function refreshBalance() {
-            const { data } = await db.from('user_balances').select('pending_balance').eq('wallet_address', userWallet).maybeSingle();
-            if (data) {
-                userBalance = parseFloat(data.pending_balance);
-                document.getElementById("balText").innerText = userBalance.toFixed(2);
-            }
-        }
-
-        async function startMatchmaking() {
-            if(userBalance < 5) return alert("Low Balance!");
-            document.getElementById('gameLobby').style.display = 'none';
-            document.getElementById('waitingScreen').style.display = 'block';
-
-            let timer = 60;
-            const sIv = setInterval(() => {
-                timer--; document.getElementById('searchTimer').innerText = timer + "s";
-                if(timer <= 0 && !duelActive) { clearInterval(sIv); location.reload(); }
             }, 1000);
 
-            const { data, error } = await db.rpc('join_or_create_match', { p_address: userWallet });
-            if(error) return location.reload();
+            const { data } = await supabaseClient.rpc('join_or_create_match', { p_address: myAddress });
+            matchId = data.match_id; isP1 = data.is_p1;
 
-            matchId = data.match_id;
-            channel = db.channel(`duel_${matchId}`, { config: { broadcast: { self: true } } });
-            channel.on('broadcast', { event: 'start' }, () => {
-                clearInterval(sIv);
-                beginDuel();
-            }).on('broadcast', { event: 'sync' }, ({payload}) => {
-                if(payload.wallet !== userWallet) {
-                    oppCurrentScore = payload.score;
-                    document.getElementById('oppScore').innerText = oppCurrentScore;
-                    document.getElementById('p2Name').innerText = payload.user.substring(0,8);
-                }
-            }).subscribe(async (st) => { if(st === 'SUBSCRIBED') checkBothReady(); });
+            // Broadcast Channel for Instant Sync
+            channel = supabaseClient.channel(`room_${matchId}`, { config: { broadcast: { self: true } } });
+
+            channel.on('broadcast', { event: 'game_start' }, () => startSyncCountdown())
+                   .on('broadcast', { event: 'score_update' }, ({ payload }) => {
+                        if (payload.sender !== myAddress) {
+                            oppScore = payload.score;
+                            document.getElementById('opp-score').innerText = oppScore;
+                        }
+                   })
+                   .on('broadcast', { event: 'game_force_end' }, () => finalizeGame())
+                   .subscribe(async (status) => {
+                        if (status === 'SUBSCRIBED') {
+                            await supabaseClient.from('matches').update(isP1 ? { p1_ready: true } : { p2_ready: true }).eq('id', matchId);
+                            checkBothReady();
+                        }
+                   });
         }
 
         async function checkBothReady() {
-            const { data } = await db.from('matches').select('p1_ready, p2_ready').eq('id', matchId).single();
-            if(data && data.p1_ready && data.p2_ready) {
-                await db.from('user_balances').update({ pending_balance: userBalance - 5 }).eq('wallet_address', userWallet);
-                channel.send({ type: 'broadcast', event: 'start' });
-            } else { setTimeout(checkBothReady, 2000); }
+            const { data } = await supabaseClient.from('matches').select('p1_ready, p2_ready').eq('id', matchId).single();
+            if (data.p1_ready && data.p2_ready) {
+                channel.send({ type: 'broadcast', event: 'game_start' });
+            } else {
+                setTimeout(checkBothReady, 1000); // Check every second until both are in
+            }
         }
 
-        function beginDuel() {
-            document.getElementById('waitingScreen').style.display = 'none';
-            document.getElementById('gameArea').style.display = 'block';
-            duelActive = true; myCurrentScore = 0; oppCurrentScore = 0;
-            let time = 30;
-            const bIv = setInterval(() => {
-                time--; document.getElementById('battleTimer').innerText = time + "s";
-                if(time <= 0) { clearInterval(bIv); finishDuel(); }
+        function startSyncCountdown() {
+            if (gameActive) return;
+            gameActive = true;
+            let cd = 3;
+            const loader = document.getElementById('wait-status');
+            const timer = setInterval(() => {
+                loader.innerText = `STARTING IN ${cd}...`;
+                cd--;
+                if (cd < 0) {
+                    clearInterval(timer);
+                    document.getElementById('waiting-overlay').style.display = 'none';
+                    document.getElementById('setup-screen').style.display = 'none';
+                    document.getElementById('game-screen').style.display = 'block';
+                    runTimer();
+                }
             }, 1000);
         }
 
-        function rollDicePVP() {
-            if(!duelActive) return;
-            myCurrentScore += Math.floor(Math.random() * 6) + 1;
-            document.getElementById('myScore').innerText = myCurrentScore;
-            channel.send({ type: 'broadcast', event: 'sync', payload: { wallet: userWallet, score: myCurrentScore, user: currentUsername } });
+        function runTimer() {
+            let gTime = 30;
+            const t = setInterval(() => {
+                gTime--;
+                document.getElementById('game-timer').innerText = gTime + "s";
+                if (gTime <= 0) {
+                    clearInterval(t);
+                    channel.send({ type: 'broadcast', event: 'game_force_end' });
+                }
+            }, 1000);
         }
 
-        async function finishDuel() {
-            duelActive = false;
-            const win = myCurrentScore > oppCurrentScore;
-            const tie = myCurrentScore === oppCurrentScore;
-            if(win) {
-                confetti(); alert("YOU WIN! 8.5 TOFFEE");
-                await db.from('user_balances').update({ pending_balance: userBalance + 8.5 }).eq('wallet_address', userWallet);
-            } else if(tie) {
-                alert("Tie! Refunded.");
-                await db.from('user_balances').update({ pending_balance: userBalance }).eq('wallet_address', userWallet);
-            } else { alert("You Lost!"); }
-            location.reload();
+        async function rollDice() {
+            if (!gameActive || document.getElementById('game-timer').innerText === "0s") return;
+            myScore += Math.floor(Math.random() * 6) + 1;
+            document.getElementById('my-score').innerText = myScore;
+            document.getElementById('dice-cube').style.transform = `rotateX(${Math.random()*360}deg) rotateY(${Math.random()*360}deg)`;
+            
+            // Instant score broadcast
+            channel.send({ type: 'broadcast', event: 'score_update', payload: { sender: myAddress, score: myScore } });
+            // DB backup
+            await supabaseClient.from('matches').update(isP1 ? { p1_score: myScore } : { p2_score: myScore }).eq('id', matchId);
         }
 
-        async function processClaim() {
-            const code = document.getElementById('codeInput').value.trim();
-            if(!code) return;
-            const { data } = await db.rpc('claim_toffee_code', { user_wallet: userWallet, input_code: code });
-            if(data === 'SUCCESS') { confetti(); refreshBalance(); alert("1 TOFFEE ADDED!"); }
-            else { alert("Invalid Code!"); }
-            document.getElementById('codeInput').value = "";
+        async function finalizeGame() {
+            gameActive = false;
+            const { data: m } = await supabaseClient.from('matches').select('*').eq('id', matchId).single();
+            const myFinal = isP1 ? m.p1_score : m.p2_score;
+            const opFinal = isP1 ? m.p2_score : m.p1_score;
+            const win = myFinal > opFinal;
+
+            await supabaseClient.rpc('increment_tnv', { player_wallet: myAddress, amount: win ? 15 : 10 });
+            alert(win ? "VICTORY! +15 TNV" : "GAME OVER! +10 TNV");
+            location.reload(); // Reset to Home
+        }
+
+        function resetToHome() {
+            document.getElementById('waiting-overlay').style.display = 'none';
+            document.getElementById('start-btn').disabled = false;
+            document.getElementById('start-btn').innerText = "TRY AGAIN (NO OPPONENT)";
+            matchmakingActive = false;
         }
     </script>
 </body>
