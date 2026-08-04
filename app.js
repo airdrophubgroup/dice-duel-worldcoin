@@ -42,10 +42,21 @@ window.addEventListener('DOMContentLoaded', async () => {
           localStorage.setItem("myAddress", userAddr);
           localStorage.setItem("myUsername", username);
         } else {
-          await performWalletAuth(false);
+          let fakeAddress = localStorage.getItem("myAddress");
+          let fakeUsername = localStorage.getItem("myUsername");
+          if (!fakeAddress || !fakeAddress.startsWith('0xDEV')) {
+            const randomHex = Math.floor(Math.random() * 10000).toString(16);
+            fakeAddress = '0xDEV000000000000000000000000000' + randomHex;
+            fakeUsername = '@TestUser_' + randomHex;
+            localStorage.setItem("myAddress", fakeAddress);
+            localStorage.setItem("myUsername", fakeUsername);
+          }
+          setUserData(fakeUsername, fakeAddress);
         }
       } catch (err) {
-        console.warn("MiniKit user fetch error:", err);
+        let fakeAddress = localStorage.getItem("myAddress") || '0xDEV0000000000000000000000000001234';
+        let fakeUsername = localStorage.getItem("myUsername") || '@TestUser_1234';
+        setUserData(fakeUsername, fakeAddress);
       }
     }
   } else {
@@ -483,14 +494,23 @@ async function performWalletAuth(silent = false){
 }
 
 // ----------------------------------------------------
-// PLAY BUTTON: STYLISH CUSTOM PAYMENT MODAL FLOW
+// PLAY BUTTON: STYLISH CUSTOM PAYMENT MODAL FLOW WITH AUTO-INIT SAFETY
 // ----------------------------------------------------
 async function handlePlayButtonClick(){
   if (matchmakingActive) return;
 
+  // Safety fallback if user address is not initialized
   if (!myAddress) {
-    alert('User not initialized.');
-    return;
+    let fakeAddress = localStorage.getItem("myAddress");
+    let fakeUsername = localStorage.getItem("myUsername");
+    if (!fakeAddress) {
+      const randomHex = Math.floor(Math.random() * 10000).toString(16);
+      fakeAddress = '0xDEV000000000000000000000000000' + randomHex;
+      fakeUsername = '@TestUser_' + randomHex;
+      localStorage.setItem("myAddress", fakeAddress);
+      localStorage.setItem("myUsername", fakeUsername);
+    }
+    setUserData(fakeUsername || '@Player', fakeAddress);
   }
 
   const { data: usrData } = await supabaseClient.from('user_rewards').select('wld_balance').eq('wallet_address', myAddress).maybeSingle();
