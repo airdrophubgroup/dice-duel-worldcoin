@@ -31,17 +31,22 @@ window.addEventListener('DOMContentLoaded', async () => {
   if (MiniKit.isInstalled()) {
     $('landingHint').textContent = 'World App detected — signing in...';
     const signedIn = await performWalletAuth(true);
+    
     if (!signedIn) {
-      let fakeAddress = localStorage.getItem("myAddress");
-      let fakeUsername = localStorage.getItem("myUsername");
-      if (!fakeAddress || !fakeAddress.startsWith('0xDEV')) {
-        const randomHex = Math.floor(Math.random() * 10000).toString(16);
-        fakeAddress = '0xDEV000000000000000000000000000' + randomHex;
-        fakeUsername = '@TestUser_' + randomHex;
-        localStorage.setItem("myAddress", fakeAddress);
-        localStorage.setItem("myUsername", fakeUsername);
+      try {
+        if (MiniKit.user && MiniKit.user.walletAddress) {
+          realWorldIdUser = true;
+          const userAddr = MiniKit.user.walletAddress;
+          const username = MiniKit.user.username ? '@' + MiniKit.user.username : await resolveUsername(userAddr);
+          setUserData(username, userAddr);
+          localStorage.setItem("myAddress", userAddr);
+          localStorage.setItem("myUsername", username);
+        } else {
+          await performWalletAuth(false);
+        }
+      } catch (err) {
+        console.warn("MiniKit user fetch error:", err);
       }
-      setUserData(fakeUsername, fakeAddress);
     }
   } else {
     $('landingHint').textContent = 'Desktop Mode (Simulation active)';
