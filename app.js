@@ -1,4 +1,4 @@
-import { MiniKit } from "https://cdn.jsdelivr.net/npm/@worldcoin/minikit-js@latest/+esm";
+import { MiniKit, Tokens, tokenToDecimals } from "https://cdn.jsdelivr.net/npm/@worldcoin/minikit-js@latest/+esm";
 import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm";
 
 const SB_URL = "https://efmkazyrxllcyvcwmewd.supabase.co";
@@ -27,9 +27,11 @@ const $ = (id) => document.getElementById(id);
 
 window.addEventListener('DOMContentLoaded', async () => {
   try { MiniKit.install(WORLD_APP_ID); } catch(e) {}
-  
+
   if (MiniKit.isInstalled()) {
-    $('landingHint').textContent = 'World App detected — Tap Play Now to Sign In & Play';
+    $('landingHint').textContent = 'World App detected — signing you in...';
+    // STEP 1 (auto): inside World App, sign the user in automatically via walletAuth
+    await performWalletAuth(true);
   } else {
     $('landingHint').textContent = 'Desktop Mode (Simulation active)';
     let fakeAddress = localStorage.getItem("myAddress");
@@ -438,83 +440,110 @@ async function resolveUsername(address){
   return '@WLD_' + address.substring(2, 8);
 }
 
-// 1. PLAY BUTTON: FIRST SIGN IN VIA MINIKIT, THEN TRIGGER PAYMENT, THEN MATCHMAKING
+// ----------------------------------------------------
+// STEP 1: WALLET SIGN-IN (auto on load inside World App, or manual before PLAY NOW)
+// Returns true only if the user is actually signed in with a real wallet address.
+// ----------------------------------------------------
+async function performWalletAuth(silent = false){
+  if (!MiniKit.isInstalled()) return false;
+  if (myAddress && realWorldIdUser) return true; // already signed in
+
+  try {
+    const result = await MiniKit.walletAuth({
+      nonce: randomAlphaNumeric(24),
+      requestId: 'req_login_' + Date.now(),
+      expirationTime: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+      notBefore: new Date(Date.now() - 60 * 1000),
+      statement: 'Sign in to TNV Duel Arena.',
+    });
+
+    const data = result?.data;
+    if (result?.executedWith !== 'fallback' && data?.address && data?.signature){
+      realWorldIdUser = true;
+      const username = await resolveUsername(data.address);
+      setUserData(username, data.address);
+      localStorage.setItem("myAddress", data.address);
+      localStorage.setItem("myUsername", username);
+      return true;
+    }
+
+    if (!silent) alert("Sign-in cancelled or failed.");
+    return false;
+  } catch (err) {
+    if (!silent) alert("Wallet authentication error.");
+    return false;
+  }
+}
+
+// ----------------------------------------------------
+// PLAY BUTTON: 1) SIGN IN (if needed) -> 2) MINIKIT.PAY -> 3) MATCHMAKING (only on success)
+// ----------------------------------------------------
 async function handlePlayButtonClick(){
   if (matchmakingActive) return;
 
-  // Step A: Sign In / Wallet Auth if not connected
-  if (!realWorldIdUser || !myAddress) {
-    if (MiniKit.isInstalled()) {
-      try {
-        const result = await MiniKit.walletAuth({
-          nonce: randomAlphaNumeric(24),
-          requestId: 'req_login_' + Date.now(),
-          expirationTime: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
-          notBefore: new Date(Date.now() - 60 * 1000),
-          statement: 'Sign in to TNV Duel Arena.',
-        });
-        const data = result?.data;
-        if (result?.executedWith !== 'fallback' && data?.address && data?.signature){
-          realWorldIdUser = true;
-          const username = await resolveUsername(data.address);
-          setUserData(username, data.address);
-          localStorage.setItem("myAddress", data.address);
-          localStorage.setItem("myUsername", username);
-        } else {
-          alert("Sign-in cancelled or failed.");
-          return;
-        }
-      } catch(err) {
-        alert("Wallet authentication error.");
-        return;
-      }
-    } else {
-      realWorldIdUser = true;
+  // STEP 1: Ensure wallet is signed in before anything else
+  if (MiniKit.isInstalled()) {
+    if (!myAddress || !realWorldIdUser) {
+      const signedIn = await performWalletAuth(false);
+      if (!signedIn) return; // user cancelled sign-in / failed — stop here, nothing else happens
     }
+  } else if (!myAddress) {
+    // Desktop simulation has no wallet to sign in with; nothing to do here,
+    // DOMContentLoaded already assigned a fake dev address.
+    return;
   }
 
-  // Step B: Trigger Official MiniKit Payment Request popup
+  // STEP 2: Trigger the official MiniKit payment request (Allow / Cancel prompt)
   if (MiniKit.isInstalled()) {
+    $('start-btn').disabled = true;
+
+    let paymentSuccessful = false;
     try {
       const paymentPayload = {
-        reference: 'ref_' + Date.now(),
+        reference: 'ref_' + randomAlphaNumeric(16),
         to: ADMIN_WALLET,
         tokens: [
           {
-            symbol: "WLD",
-            token_amount: selectedFee.toString(),
+            symbol: Tokens.WLD,
+            token_amount: tokenToDecimals(selectedFee, Tokens.WLD).toString(),
           },
         ],
         description: `TNV Duel Arena Bet: ${selectedFee} WLD`,
       };
 
-      const res = await MiniKit.commandsAsync.pay(paymentPayload);
-      const response = res?.finalPayload || res?.result || res;
-
-      if (!response || (response.status && response.status !== "success")) {
-        alert("Payment was cancelled or failed.");
-        return;
-      }
-
-      await logMatchHistory(ADMIN_WALLET, 'ADMIN_FEE', selectedFee, `Entry fee payment from ${myUsername || myAddress}`);
+      const payResult = await MiniKit.pay(paymentPayload);
+      const status = payResult?.data?.status ?? payResult?.finalPayload?.status;
+      paymentSuccessful = (status === 'success');
 
     } catch (err) {
       console.warn("Payment error:", err);
-      alert("Payment request could not be completed.");
+      paymentSuccessful = false;
+    }
+
+    // STEP 3: Only proceed if payment was genuinely successful
+    if (!paymentSuccessful) {
+      alert("Payment was cancelled or failed.");
+      $('start-btn').disabled = false;
       return;
     }
+
+    await logMatchHistory(ADMIN_WALLET, 'ADMIN_FEE', selectedFee, `Entry fee payment from ${myUsername || myAddress}`);
+
   } else {
-    // Desktop simulation fallback
+    // Desktop simulation fallback (no MiniKit / no real payment prompt available)
     const { data: usrData } = await supabaseClient.from('user_rewards').select('wld_balance').eq('wallet_address', myAddress).maybeSingle();
     let currentWld = Number(usrData?.wld_balance || 100);
     if (currentWld < selectedFee) {
       alert(`Insufficient WLD Balance: ${currentWld.toFixed(2)}, Required: ${selectedFee}`);
       return;
     }
+    if (!confirm(`Confirm payment of ${selectedFee} WLD to start match?`)) {
+      return; // simulated cancel
+    }
     await supabaseClient.from('user_rewards').update({ wld_balance: Number((currentWld - selectedFee).toFixed(2)) }).eq('wallet_address', myAddress);
   }
 
-  // Step C: Start Matchmaking after successful Sign-In & Payment
+  // STEP 3 (continued): Start matchmaking only after a successful payment
   initMatchmakingAfterPayment();
 }
 
