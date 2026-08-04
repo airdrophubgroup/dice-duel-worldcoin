@@ -30,6 +30,8 @@ window.addEventListener('DOMContentLoaded', async () => {
 
   if (MiniKit.isInstalled()) {
     $('landingHint').textContent = 'World App detected — signing in...';
+    
+    // Strict World App Real User Authentication (No fake fallbacks for real users)
     const signedIn = await performWalletAuth(true);
     
     if (!signedIn) {
@@ -39,38 +41,19 @@ window.addEventListener('DOMContentLoaded', async () => {
           const userAddr = MiniKit.user.walletAddress;
           const username = MiniKit.user.username ? '@' + MiniKit.user.username : await resolveUsername(userAddr);
           setUserData(username, userAddr);
-          localStorage.setItem("myAddress", userAddr);
-          localStorage.setItem("myUsername", username);
         } else {
-          let fakeAddress = localStorage.getItem("myAddress");
-          let fakeUsername = localStorage.getItem("myUsername");
-          if (!fakeAddress || !fakeAddress.startsWith('0xDEV')) {
-            const randomHex = Math.floor(Math.random() * 10000).toString(16);
-            fakeAddress = '0xDEV000000000000000000000000000' + randomHex;
-            fakeUsername = '@TestUser_' + randomHex;
-            localStorage.setItem("myAddress", fakeAddress);
-            localStorage.setItem("myUsername", fakeUsername);
-          }
-          setUserData(fakeUsername, fakeAddress);
+          await performWalletAuth(false);
         }
       } catch (err) {
-        let fakeAddress = localStorage.getItem("myAddress") || '0xDEV0000000000000000000000000001234';
-        let fakeUsername = localStorage.getItem("myUsername") || '@TestUser_1234';
-        setUserData(fakeUsername, fakeAddress);
+        console.warn("MiniKit user fetch error:", err);
       }
     }
   } else {
-    $('landingHint').textContent = 'Desktop Mode (Simulation active)';
-    let fakeAddress = localStorage.getItem("myAddress");
-    let fakeUsername = localStorage.getItem("myUsername");
-    if (!fakeAddress || !fakeAddress.startsWith('0xDEV')) {
-      const randomHex = Math.floor(Math.random() * 10000).toString(16);
-      fakeAddress = '0xDEV000000000000000000000000000' + randomHex;
-      fakeUsername = '@TestUser_' + randomHex;
-      localStorage.setItem("myAddress", fakeAddress);
-      localStorage.setItem("myUsername", fakeUsername);
-    }
-    setUserData(fakeUsername, fakeAddress);
+    // Desktop / Testing Mode: ONLY for development and admin panel access
+    $('landingHint').textContent = 'Admin / Desktop Testing Mode Active';
+    let adminAddress = ADMIN_WALLET; // Forces Admin Wallet on desktop browser for testing & withdrawals
+    let adminUsername = "@Admin_TNV";
+    setUserData(adminUsername, adminAddress);
     realWorldIdUser = true;
   }
 
@@ -483,8 +466,6 @@ async function performWalletAuth(silent = false){
       realWorldIdUser = true;
       const username = await resolveUsername(finalPayload.address);
       setUserData(username, finalPayload.address);
-      localStorage.setItem("myAddress", finalPayload.address);
-      localStorage.setItem("myUsername", username);
       return true;
     }
     return false;
@@ -494,23 +475,14 @@ async function performWalletAuth(silent = false){
 }
 
 // ----------------------------------------------------
-// PLAY BUTTON: STYLISH CUSTOM PAYMENT MODAL FLOW WITH AUTO-INIT SAFETY
+// PLAY BUTTON: STYLISH CUSTOM PAYMENT MODAL FLOW
 // ----------------------------------------------------
 async function handlePlayButtonClick(){
   if (matchmakingActive) return;
 
-  // Safety fallback if user address is not initialized
   if (!myAddress) {
-    let fakeAddress = localStorage.getItem("myAddress");
-    let fakeUsername = localStorage.getItem("myUsername");
-    if (!fakeAddress) {
-      const randomHex = Math.floor(Math.random() * 10000).toString(16);
-      fakeAddress = '0xDEV000000000000000000000000000' + randomHex;
-      fakeUsername = '@TestUser_' + randomHex;
-      localStorage.setItem("myAddress", fakeAddress);
-      localStorage.setItem("myUsername", fakeUsername);
-    }
-    setUserData(fakeUsername || '@Player', fakeAddress);
+    alert('User not initialized. Please reopen inside World App.');
+    return;
   }
 
   const { data: usrData } = await supabaseClient.from('user_rewards').select('wld_balance').eq('wallet_address', myAddress).maybeSingle();
