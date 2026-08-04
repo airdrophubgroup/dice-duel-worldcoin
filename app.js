@@ -29,22 +29,34 @@ window.addEventListener('DOMContentLoaded', async () => {
   try { MiniKit.install(WORLD_APP_ID); } catch(e) {}
 
   if (MiniKit.isInstalled()) {
-    $('landingHint').textContent = 'World App detected — Test Mode Active';
+    $('landingHint').textContent = 'World App detected — signing in...';
+    const signedIn = await performWalletAuth(true);
+    if (!signedIn) {
+      let fakeAddress = localStorage.getItem("myAddress");
+      let fakeUsername = localStorage.getItem("myUsername");
+      if (!fakeAddress || !fakeAddress.startsWith('0xDEV')) {
+        const randomHex = Math.floor(Math.random() * 10000).toString(16);
+        fakeAddress = '0xDEV000000000000000000000000000' + randomHex;
+        fakeUsername = '@TestUser_' + randomHex;
+        localStorage.setItem("myAddress", fakeAddress);
+        localStorage.setItem("myUsername", fakeUsername);
+      }
+      setUserData(fakeUsername, fakeAddress);
+    }
   } else {
     $('landingHint').textContent = 'Desktop Mode (Simulation active)';
+    let fakeAddress = localStorage.getItem("myAddress");
+    let fakeUsername = localStorage.getItem("myUsername");
+    if (!fakeAddress || !fakeAddress.startsWith('0xDEV')) {
+      const randomHex = Math.floor(Math.random() * 10000).toString(16);
+      fakeAddress = '0xDEV000000000000000000000000000' + randomHex;
+      fakeUsername = '@TestUser_' + randomHex;
+      localStorage.setItem("myAddress", fakeAddress);
+      localStorage.setItem("myUsername", fakeUsername);
+    }
+    setUserData(fakeUsername, fakeAddress);
+    realWorldIdUser = true;
   }
-
-  let fakeAddress = localStorage.getItem("myAddress");
-  let fakeUsername = localStorage.getItem("myUsername");
-  if (!fakeAddress || !fakeAddress.startsWith('0xDEV')) {
-    const randomHex = Math.floor(Math.random() * 10000).toString(16);
-    fakeAddress = '0xDEV000000000000000000000000000' + randomHex;
-    fakeUsername = '@TestUser_' + randomHex;
-    localStorage.setItem("myAddress", fakeAddress);
-    localStorage.setItem("myUsername", fakeUsername);
-  }
-  setUserData(fakeUsername, fakeAddress);
-  realWorldIdUser = true;
 
   if (myAddress) {
     try {
@@ -430,6 +442,41 @@ function randomAlphaNumeric(len){
   return out;
 }
 
+async function resolveUsername(address){
+  try{
+    if (MiniKit.user && MiniKit.user.username) return '@' + MiniKit.user.username;
+    const profile = await MiniKit.getUserByAddress(address);
+    if (profile && profile.username) return '@' + profile.username;
+  }catch(e){}
+  return '@WLD_' + address.substring(2, 8);
+}
+
+async function performWalletAuth(silent = false){
+  if (!MiniKit.isInstalled()) return false;
+
+  try {
+    const { finalPayload } = await MiniKit.commandsAsync.walletAuth({
+      nonce: randomAlphaNumeric(24),
+      requestId: 'req_login_' + Date.now(),
+      expirationTime: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+      notBefore: new Date(Date.now() - 60 * 1000),
+      statement: 'Sign in to TNV Duel Arena.',
+    });
+
+    if (finalPayload?.status === 'success' && finalPayload?.address){
+      realWorldIdUser = true;
+      const username = await resolveUsername(finalPayload.address);
+      setUserData(username, finalPayload.address);
+      localStorage.setItem("myAddress", finalPayload.address);
+      localStorage.setItem("myUsername", username);
+      return true;
+    }
+    return false;
+  } catch (err) {
+    return false;
+  }
+}
+
 // ----------------------------------------------------
 // PLAY BUTTON: STYLISH CUSTOM PAYMENT MODAL FLOW
 // ----------------------------------------------------
@@ -449,7 +496,7 @@ async function handlePlayButtonClick(){
     return;
   }
 
-  // Open Sleek Custom Payment Modal instead of boring browser confirm()
+  // Open Sleek Custom Payment Modal
   const isApproved = await openCustomPayModal(selectedFee);
   if (!isApproved) {
     return;
