@@ -29,56 +29,50 @@ window.addEventListener('DOMContentLoaded', async () => {
   try { MiniKit.install(WORLD_APP_ID); } catch(e) {}
 
   let detectedAddr = null;
-  
-  if (MiniKit.isInstalled()) {
-    detectedAddr = MiniKit.user && MiniKit.user.walletAddress ? MiniKit.user.walletAddress : null;
+  let detectedUsername = null;
+
+  // 1. Direct check from MiniKit injected user profile
+  if (MiniKit.isInstalled() && MiniKit.user) {
+    if (MiniKit.user.walletAddress) detectedAddr = MiniKit.user.walletAddress;
+    if (MiniKit.user.username) detectedUsername = '@' + MiniKit.user.username;
   }
 
-  // Agar MiniKit se turant address na mile, toh localStorage ya safe fallback use karein taaki game crash na ho
+  // 2. If not found instantly, try fetching via MiniKit walletAuth command silently
+  if (!detectedAddr && MiniKit.isInstalled()) {
+    try {
+      const { finalPayload } = await MiniKit.commandsAsync.walletAuth({
+        nonce: randomAlphaNumeric(24),
+        requestId: 'req_login_' + Date.now(),
+        expirationTime: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+        notBefore: new Date(Date.now() - 60 * 1000),
+        statement: 'Sign in to TNV Duel Arena.',
+      });
+      if (finalPayload?.status === 'success' && finalPayload?.address) {
+        detectedAddr = finalPayload.address;
+      }
+    } catch (e) {}
+  }
+
+  // Fallback to localStorage if already logged in before
   if (!detectedAddr) {
     detectedAddr = localStorage.getItem("myAddress");
+    detectedUsername = localStorage.getItem("myUsername");
   }
-
-  if (!detectedAddr) {
-    // Agar app admin ke taur par khul rahi hai ya normal user hai, toh valid session assign karein
-    detectedAddr = ADMIN_WALLET; // Testing ke liye admin, ya aap random user bhi rakh sakte hain
-  }
-
-  const username = (MiniKit.user && MiniKit.user.username) ? '@' + MiniKit.user.username : '@TNV_Player';
-  setUserData(username, detectedAddr);
-  localStorage.setItem("myAddress", detectedAddr);
-  localStorage.setItem("myUsername", username);
-
-  const authContainer = document.getElementById('auth-container');
-  if (authContainer) authContainer.style.display = 'none';
 
   if (detectedAddr) {
-    try {
-      const { data: stuckMatches } = await supabaseClient
-        .from('matches')
-        .select('*')
-        .or(`p1_address.eq.${detectedAddr},p2_address.eq.${detectedAddr}`)
-        .eq('status', 'waiting');
+    realWorldIdUser = true;
+    if (!detectedUsername) {
+      detectedUsername = await resolveUsername(detectedAddr);
+    }
+    setUserData(detectedUsername, detectedAddr);
+    localStorage.setItem("myAddress", detectedAddr);
+    localStorage.setItem("myUsername", detectedUsername);
 
-      if (stuckMatches && stuckMatches.length > 0) {
-        for (let match of stuckMatches) {
-          if (!match.game_started) {
-            await supabaseClient.from('matches').delete().eq('id', match.id);
-          }
-        }
-      }
-    } catch(e) {}
-  }
-
-  let waitingOverlay = $('waiting-overlay');
-  if (waitingOverlay && !document.getElementById('cancel-search-btn')) {
-    const cancelBtn = document.createElement('button');
-    cancelBtn.id = 'cancel-search-btn';
-    cancelBtn.className = 'btn btn-ghost';
-    cancelBtn.style.cssText = 'margin-top: 20px; padding: 10px 20px; font-size: 12px; border: 1px solid rgba(255,255,255,0.2);';
-    cancelBtn.innerText = 'CANCEL SEARCH';
-    cancelBtn.onclick = () => cancelMatchmaking(true);
-    waitingOverlay.appendChild(cancelBtn);
+    const authContainer = document.getElementById('auth-container');
+    if (authContainer) authContainer.style.display = 'none';
+  } else {
+    const landingHint = $('landingHint');
+    if (landingHint) landingHint.textContent = 'Please tap below to sign in with your World ID.';
   }
 
   initGlobalChat();
@@ -88,36 +82,49 @@ window.addEventListener('DOMContentLoaded', async () => {
 
 window.triggerWorldIDWalletAuth = async function() {
   const landingHint = $('landingHint');
-  if (landingHint) landingHint.textContent = 'Connecting session...';
+  if (landingHint) landingHint.textContent = 'Requesting World ID verification...';
 
   try {
-    if (MiniKit.isInstalled()) {
-      const { finalPayload } = await MiniKit.commandsAsync.walletAuth({
-        nonce: randomAlphaNumeric(24),
-        requestId: 'req_login_' + Date.now(),
-        expirationTime: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
-        notBefore: new Date(Date.now() - 60 * 1000),
-        statement: 'Sign in to TNV Duel Arena to play & earn.',
-      });
-
-      if (finalPayload?.status === 'success' && finalPayload?.address) {
-        setUserData(MiniKit.user?.username ? '@' + MiniKit.user.username : '@Player', finalPayload.address);
-        const authContainer = document.getElementById('auth-container');
-        if (authContainer) authContainer.style.display = 'none';
-        return;
-      }
+    if (!MiniKit.isInstalled()) {
+      alert('Please open inside World App.');
+      return;
     }
-    
-    // Smooth fallback agar popup cancel ho ya fail ho
-    setUserData('@TNV_Player', ADMIN_WALLET);
-    const authContainer = document.getElementById('auth-container');
-    if (authContainer) authContainer.style.display = 'none';
+
+    const { finalPayload } = await MiniKit.commandsAsync.walletAuth({
+      nonce: randomAlphaNumeric(24),
+      requestId: 'req_login_' + Date.now(),
+      expirationTime: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+      notBefore: new Date(Date.now() - 60 * 1000),
+      statement: 'Sign in to TNV Duel Arena to play & earn.',
+    });
+
+    if (finalPayload?.status === 'success' && finalPayload?.address) {
+      const realAddr = finalPayload.address;
+      const realUser = (MiniKit.user && MiniKit.user.username) ? '@' + MiniKit.user.username : await resolveUsername(realAddr);
+      
+      setUserData(realUser, realAddr);
+      localStorage.setItem("myAddress", realAddr);
+      localStorage.setItem("myUsername", realUser);
+
+      const authContainer = document.getElementById('auth-container');
+      if (authContainer) authContainer.style.display = 'none';
+    } else {
+      alert('World ID verification failed or was cancelled.');
+      if (landingHint) landingHint.textContent = 'Sign in failed. Tap to retry.';
+    }
   } catch (err) {
-    setUserData('@TNV_Player', ADMIN_WALLET);
-    const authContainer = document.getElementById('auth-container');
-    if (authContainer) authContainer.style.display = 'none';
+    alert('Authentication error: ' + err.message);
+    if (landingHint) landingHint.textContent = 'Error occurred. Tap to retry.';
   }
 };
+
+async function resolveUsername(address) {
+  try {
+    const profile = await MiniKit.getUserByAddress(address);
+    if (profile && profile.username) return '@' + profile.username;
+  } catch(e) {}
+  return '@WLD_' + address.substring(2, 8);
+}
 
 window.addEventListener('beforeunload', () => {
   if (matchmakingActive && matchId && !gameActive) {
