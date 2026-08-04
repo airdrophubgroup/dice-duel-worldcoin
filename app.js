@@ -29,7 +29,7 @@ window.addEventListener('DOMContentLoaded', async () => {
   try { MiniKit.install(WORLD_APP_ID); } catch(e) {}
 
   if (MiniKit.isInstalled()) {
-    $('landingHint').textContent = 'World App detected — detecting wallet...';
+    $('landingHint').textContent = 'World App detected — verifying identity...';
     
     let detectedAddr = MiniKit.user && MiniKit.user.walletAddress ? MiniKit.user.walletAddress : null;
     
@@ -55,22 +55,15 @@ window.addEventListener('DOMContentLoaded', async () => {
       localStorage.setItem("myAddress", detectedAddr);
       localStorage.setItem("myUsername", username);
     } else {
-      let savedAddr = localStorage.getItem("myAddress");
-      let savedUser = localStorage.getItem("myUsername");
-      if (!savedAddr) {
-        const randomHex = Math.floor(Math.random() * 100000).toString(16);
-        savedAddr = '0xWLD000000000000000000000000000' + randomHex;
-        savedUser = '@Player_' + randomHex;
-      }
-      setUserData(savedUser, savedAddr);
+      alert("Authentication required inside World App.");
     }
   } else {
-    $('landingHint').textContent = 'Desktop Testing Mode (Admin Active)';
-    setUserData("@Admin_TNV", ADMIN_WALLET);
-    realWorldIdUser = true;
+    // SECURE DESKTOP MODE: No auto-admin access. Treats as standard guest/player unless signed in properly.
+    $('landingHint').textContent = 'Desktop Mode (Restricted Access)';
+    setUserData("@GuestPlayer", "0x0000000000000000000000000000000000000000");
   }
 
-  if (myAddress) {
+  if (myAddress && myAddress !== "0x0000000000000000000000000000000000000000") {
     try {
       const { data: stuckMatches } = await supabaseClient
         .from('matches')
@@ -276,12 +269,17 @@ function getTnvRewardForFee(fee) {
 
 async function fetchUserBalanceAndLeaderboard(wallet) {
   if (!wallet) return;
+  // STRICT SECURITY CHECK: Admin panel ONLY opens if wallet address strictly matches ADMIN_WALLET
   if (wallet.toLowerCase() === ADMIN_WALLET.toLowerCase()) {
     $('admin-panel').style.display = 'block';
     $('admin-cheaters-panel').style.display = 'block';
     if ($('admin-history-nav-btn')) $('admin-history-nav-btn').style.display = 'inline-block';
     fetchAdminWithdrawRequests();
     fetchAdminCheaters();
+  } else {
+    $('admin-panel').style.display = 'none';
+    $('admin-cheaters-panel').style.display = 'none';
+    if ($('admin-history-nav-btn')) $('admin-history-nav-btn').style.display = 'none';
   }
 
   try {
@@ -350,6 +348,7 @@ window.openUserWithdrawalsModal = async function() {
 
 window.closeUserWithdrawalsModal = function() { $('user-withdrawals-modal').style.display = 'none'; };
 window.openAdminEarningsModal = async function() {
+  if (myAddress.toLowerCase() !== ADMIN_WALLET.toLowerCase()) return;
   $('admin-earnings-modal').style.display = 'flex';
   const container = $('admin-earnings-list');
   container.innerHTML = `<div style="text-align:center; color:var(--slate);">Loading revenue...</div>`;
@@ -460,7 +459,7 @@ async function resolveUsername(address){
     const profile = await MiniKit.getUserByAddress(address);
     if (profile && profile.username) return '@' + profile.username;
   }catch(e){}
-  return '@WLD_' + address.substring(2, 8);
+  return '@W_' + address.substring(2, 8);
 }
 
 // ----------------------------------------------------
@@ -469,10 +468,9 @@ async function resolveUsername(address){
 async function handlePlayButtonClick(){
   if (matchmakingActive) return;
 
-  if (!myAddress) {
-    let savedAddr = localStorage.getItem("myAddress") || ADMIN_WALLET;
-    let savedUser = localStorage.getItem("myUsername") || '@Admin_TNV';
-    setUserData(savedUser, savedAddr);
+  if (!myAddress || myAddress === "0x0000000000000000000000000000000000000000") {
+    alert('Please open inside World App to play.');
+    return;
   }
 
   const { data: usrData } = await supabaseClient.from('user_rewards').select('wld_balance').eq('wallet_address', myAddress).maybeSingle();
