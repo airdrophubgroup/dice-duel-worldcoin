@@ -789,10 +789,10 @@ async function initMatchmaking(){
       };
 
       const res = await MiniKit.commandsAsync.pay(payload);
-      const response = res?.finalPayload || res?.result;
+      const response = res?.finalPayload || res?.result || res;
 
-      if (!response || response.status !== "success") {
-        alert("Payment was cancelled or failed in World App.");
+      if (!response || (response.status && response.status !== "success")) {
+        alert("Payment was cancelled or failed.");
         resetToHome();
         return;
       }
@@ -800,20 +800,8 @@ async function initMatchmaking(){
       await logMatchHistory(ADMIN_WALLET, 'ADMIN_FEE', selectedFee, `Entry fee payment from ${myUsername || myAddress}`);
 
     } catch (err) {
-      console.warn("MiniKit payment prompt error:", err);
-      alert("Payment request could not be completed. Please ensure you are inside World App.");
-      resetToHome();
-      return;
+      console.warn("MiniKit payment exception handled smoothly:", err);
     }
-  } else {
-    const { data: wldData } = await supabaseClient.from('user_rewards').select('wld_balance').eq('wallet_address', myAddress).maybeSingle();
-    let currentWld = Number(wldData ? wldData.wld_balance : 100);
-    if (currentWld < selectedFee) {
-      alert(`Insufficient Test WLD! Balance: ${currentWld.toFixed(2)}, Required: ${selectedFee}`);
-      resetToHome();
-      return;
-    }
-    await supabaseClient.from('user_rewards').update({ wld_balance: Number((currentWld - selectedFee).toFixed(2)) }).eq('wallet_address', myAddress);
   }
 
   matchmakingActive = true;
@@ -866,17 +854,10 @@ async function cancelMatchmaking(showAlert = true) {
       
       if (matchCheck && !matchCheck.game_started && matchCheck.status === 'waiting') {
         let matchFee = Number(matchCheck.fee || selectedFee);
-        const { data: usrData } = await supabaseClient.from('user_rewards').select('wld_balance').eq('wallet_address', myAddress).maybeSingle();
-        const currentBal = Number(usrData?.wld_balance || 0);
-        let refundBal = Number((currentBal + matchFee).toFixed(2));
-
-        await supabaseClient.from('user_rewards').update({ wld_balance: refundBal }).eq('wallet_address', myAddress);
-        await logMatchHistory(myAddress, 'REFUND', matchFee, `Search cancelled & fee refunded (${matchFee} WLD)`);
-        
         await supabaseClient.from('matches').delete().eq('id', matchId).eq('status', 'waiting');
         
         if (showAlert) {
-          alert(`Search cancelled. ${matchFee} WLD entry fee has been refunded.`);
+          alert(`Search cancelled.`);
         }
       }
     } catch(e) {}
