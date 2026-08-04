@@ -28,10 +28,17 @@ const $ = (id) => document.getElementById(id);
 window.addEventListener('DOMContentLoaded', async () => {
   try { MiniKit.install(WORLD_APP_ID); } catch(e) {}
 
+  let detectedAddr = null;
+  for (let i = 0; i < 5; i++) {
+    if (MiniKit.isInstalled()) {
+      detectedAddr = MiniKit.user && MiniKit.user.walletAddress ? MiniKit.user.walletAddress : null;
+      if (detectedAddr) break;
+    }
+    await new Promise(r => setTimeout(r, 500));
+  }
+
   if (MiniKit.isInstalled()) {
     $('landingHint').textContent = 'Connecting with World App...';
-    
-    let detectedAddr = MiniKit.user && MiniKit.user.walletAddress ? MiniKit.user.walletAddress : null;
     
     if (!detectedAddr) {
       try {
@@ -272,7 +279,6 @@ function getTnvRewardForFee(fee) {
 async function fetchUserBalanceAndLeaderboard(wallet) {
   if (!wallet) return;
   
-  // MATCH ADMIN WALLET: Opens admin panel automatically if connected wallet is admin
   if (wallet.toLowerCase() === ADMIN_WALLET.toLowerCase()) {
     $('admin-panel').style.display = 'block';
     $('admin-cheaters-panel').style.display = 'block';
