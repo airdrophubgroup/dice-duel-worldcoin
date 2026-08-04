@@ -8,11 +8,77 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css">
+<style>
+  :root {
+    --bg-dark: #0b0f19;
+    --card-bg: #131c2e;
+    --photon: #29d9c2;
+    --gold: #f39c12;
+    --slate: #94a3b8;
+    --text-main: #f1eee6;
+    --border-color: rgba(41, 217, 194, 0.2);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Inter', sans-serif; }
+  body { background-color: var(--bg-dark); color: var(--text-main); min-height: 100vh; padding: 12px; }
+  #app { max-width: 480px; margin: 0 auto; background: var(--card-bg); border-radius: 20px; border: 1px solid var(--border-color); padding: 16px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); position: relative; }
+  
+  /* Support & Chat Buttons */
+  .support-container { position: absolute; top: 16px; left: 16px; }
+  .support-btn-main, .chat-btn-main { background: rgba(41,217,194,0.1); border: 1px solid var(--photon); color: var(--photon); padding: 6px 12px; border-radius: 8px; font-size: 12px; font-weight: 600; cursor: pointer; }
+  .support-dropdown { display: none; position: absolute; top: 32px; left: 0; background: #1a263d; border: 1px solid var(--border-color); border-radius: 8px; padding: 8px; z-index: 10; width: 130px; }
+  .support-link { display: block; color: var(--text-main); font-size: 12px; padding: 4px 0; text-decoration: none; }
+  .support-link:hover { color: var(--photon); }
+  .coming-soon { font-size: 9px; color: var(--slate); float: right; }
+  .chat-toggle-container { position: absolute; top: 16px; right: 16px; }
+
+  /* Topbar */
+  .topbar { text-align: center; margin-top: 40px; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 16px; }
+  .brand { font-family: 'Space Grotesk', sans-serif; font-size: 22px; color: var(--photon); margin-bottom: 4px; }
+  .user-card { font-size: 12px; color: var(--slate); margin-bottom: 8px; }
+  .progress-bar { width: 100%; height: 6px; background: rgba(255,255,255,0.05); border-radius: 3px; overflow: hidden; margin-top: 4px; }
+  .progress-fill { width: 0%; height: 100%; background: var(--photon); transition: width 0.3s ease; }
+
+  /* Buttons & Chips */
+  .withdraw-btn { background: var(--gold); border: none; color: #000; font-weight: 700; padding: 4px 10px; border-radius: 6px; font-size: 11px; cursor: pointer; margin-left: 6px; }
+  .withdraw-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+  .fee-title { font-size: 14px; font-weight: 600; margin: 16px 0 8px 0; text-align: center; color: var(--slate); }
+  .fee-container { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 16px; }
+  .fee-chip { background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.1); border-radius: 10px; padding: 10px; text-align: center; font-size: 13px; font-weight: 600; cursor: pointer; transition: all 0.2s; }
+  .fee-chip.active { border-color: var(--photon); background: rgba(41,217,194,0.1); color: var(--photon); box-shadow: 0 0 12px rgba(41,217,194,0.3); }
+  .chip-earn { display: block; font-size: 10px; color: var(--gold); margin-top: 2px; }
+
+  .btn-primary { width: 100%; background: var(--photon); color: #0b0f19; border: none; padding: 14px; border-radius: 12px; font-weight: 700; font-size: 15px; cursor: pointer; text-transform: uppercase; box-shadow: 0 4px 20px rgba(41,217,194,0.4); margin-bottom: 16px; }
+  .btn-primary:active { transform: scale(0.98); }
+
+  /* Radar Scanner Animation */
+  .scanner { width: 100px; height: 100px; margin: 20px auto; border-radius: 50%; border: 2px dashed var(--photon); position: relative; display: flex; align-items: center; justify-content: center; animation: spin 4s linear infinite; }
+  .core { width: 16px; height: 16px; background: var(--photon); border-radius: 50%; box-shadow: 0 0 15px var(--photon); }
+  @keyframes spin { 100% { transform: rotate(360deg); } }
+
+  /* Rules & Leaderboard */
+  .rules-card { background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.05); border-radius: 12px; padding: 12px; font-size: 12px; margin-bottom: 16px; color: var(--slate); }
+  .rules-card h3 { color: var(--text-main); margin-bottom: 6px; font-size: 13px; }
+  .rule-item { margin-bottom: 4px; }
+  .rule-item span { color: var(--text-main); font-weight: 600; }
+
+  .leaderboard-section { background: rgba(0,0,0,0.2); border-radius: 12px; padding: 12px; border: 1px solid rgba(255,255,255,0.05); }
+  .lb-header { font-size: 13px; font-weight: 700; color: var(--gold); margin-bottom: 8px; text-align: center; }
+  .lb-row { display: flex; justify-content: space-between; font-size: 12px; padding: 6px 0; border-bottom: 1px solid rgba(255,255,255,0.03); }
+  .lb-rank { font-weight: 700; color: var(--photon); }
+
+  /* Modals */
+  .custom-modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); z-index: 100; align-items: center; justify-content: center; }
+  .modal-card { background: var(--card-bg); width: 90%; max-width: 400px; border-radius: 16px; border: 1px solid var(--border-color); padding: 16px; }
+  
+  /* Overlays */
+  #waiting-overlay, #result-overlay { display: none; position: fixed; top:0; left:0; width:100%; height:100%; background:rgba(11,15,25,0.95); z-index:200; align-items:center; justify-content:center; flex-direction:column; text-align:center; }
+  #waiting-overlay h2 { color: var(--photon); font-family: 'Space Grotesk'; font-size: 24px; letter-spacing: 2px; }
+  .result-card { background: var(--card-bg); padding: 24px; border-radius: 20px; border: 1px solid var(--photon); width: 85%; max-width: 320px; box-shadow: 0 0 30px rgba(41,217,194,0.3); }
+</style>
 </head>
 <body>
 <div id="app">
-  <!-- SUPPORT (LEFT) & GLOBAL CHAT (RIGHT) CORNER BUTTONS -->
+  <!-- SUPPORT & CHAT -->
   <div class="support-container">
     <button class="support-btn-main" onclick="toggleSupportDropdown(event)">💬 Support ▼</button>
     <div id="support-dropdown" class="support-dropdown">
@@ -29,40 +95,27 @@
 
   <header class="topbar">
     <h1 class="brand">TNV Duel Arena 🎲</h1>
-    <div class="user-card">Logged in as: <span id="display-username">Tap Play Now to Connect</span></div>
+    <div class="user-card" id="display-username">Tap Play Now to Connect</div>
     
     <div style="font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--slate); margin-top: 6px;">
       Progress to Withdraw: <span id="progress-text" style="color: var(--photon); font-weight: 600;">0 / 5,000 TNV</span>
     </div>
     <div class="progress-bar"><div id="p-fill" class="progress-fill"></div></div>
     
-    <!-- WITHDRAW BUTTON TNV KE PAAS & WLD ALAG CLEAN DISPLAY -->
-    <div id="balance-area" style="display:flex; flex-direction:column; gap:6px; align-items:center; margin-top:8px;">
+    <div style="display:flex; flex-direction:column; gap:6px; align-items:center; margin-top:10px;">
       <div>
-        <span>Balance: <span id="balance-num">0</span> TNV</span>
+        <span style="font-size: 13px; font-weight: 600;">Balance: <span id="balance-num">0</span> TNV</span>
         <button id="withdraw-btn" class="withdraw-btn" disabled onclick="openWithdrawModal()">WITHDRAW</button>
       </div>
       <div style="font-size: 12px; color: var(--gold); font-weight: 600;">
         Test WLD Balance: <span id="wld-balance-num">100.00</span> WLD
       </div>
     </div>
-
-    <!-- NAVIGATION BUTTONS FOR USER HISTORY & WITHDRAWALS -->
-    <div style="display: flex; gap: 8px; justifyContent: center; flexWrap: wrap; marginTop: 10px;">
-      <button class="btn btn-ghost" style="font-size: 10.5px; padding: 6px 12px; border: 1px solid rgba(41,217,194,0.4); color: var(--photon);" onclick="openUserHistoryModal()">📜 Match History</button>
-      <button class="btn btn-ghost" style="font-size: 10.5px; padding: 6px 12px; border: 1px solid rgba(41,217,194,0.4); color: var(--photon);" onclick="openUserWithdrawalsModal()">💸 My Withdrawals</button>
-      <button id="admin-history-nav-btn" class="btn btn-ghost" style="font-size: 10.5px; padding: 6px 12px; border: 1px solid rgba(243,156,18,0.4); color: var(--gold); display: none;" onclick="openAdminEarningsModal()">🛡️ Admin Revenue</button>
-    </div>
   </header>
 
   <main>
     <section id="setup-screen">
-      <!-- 3D RADAR SCANNER FOR MATCHMAKING -->
-      <div class="scanner idle" id="idleScanner" style="opacity: 0.5;">
-        <div class="ring r1"></div>
-        <div class="ring r2"></div>
-        <div class="ring r3"></div>
-        <div class="sweep"></div>
+      <div class="scanner" id="idleScanner">
         <div class="core"></div>
       </div>
 
@@ -76,108 +129,75 @@
         <div class="fee-chip" data-fee="5">5 WLD<span class="chip-earn">+8.80</span></div>
         <div class="fee-chip" data-fee="10">10 WLD<span class="chip-earn">+17.8</span></div>
         <div class="fee-chip" data-fee="20">20 WLD<span class="chip-earn">+36.0</span></div>
-        <div class="fee-chip" data-fee="30">30 WLD<span class="chip-earn">+54.0</span></div>
-        <div class="fee-chip" data-fee="40">40 WLD<span class="chip-earn">+72.0</span></div>
         <div class="fee-chip" data-fee="50">50 WLD<span class="chip-earn">+90.0</span></div>
       </div>
 
-      <button class="btn btn-primary" id="start-btn">PLAY NOW (0.5 WLD)</button>
+      <button class="btn-primary" id="start-btn">PLAY NOW (0.5 WLD)</button>
       
       <div class="rules-card">
         <h3>📖 Game Rules & Rewards</h3>
-        <div class="rules-grid">
-          <div class="rule-item">• <span>Match Duration:</span> 32 seconds total.</div>
-          <div class="rule-item">• <span>Turn Timing:</span> Strictly 2-second cooldown per tap. 15 taps limit.</div>
-          <div class="rule-item">• <span>Winner:</span> Higher score wins the WLD pool and TNV coins.</div>
-        </div>
-      </div>
-
-      <!-- ADMIN WITHDRAWAL PANEL -->
-      <div id="admin-panel" style="display: none;">
-        <div class="admin-header">
-          <span>🛡️ ADMIN WITHDRAWAL REQUESTS</span>
-        </div>
-        <div class="admin-list" id="admin-req-container"></div>
-      </div>
-
-      <!-- AUTO-CLICKER DETECTIONS PANEL -->
-      <div id="admin-cheaters-panel" style="display: none;">
-        <div class="admin-header">
-          <span>⚠️ AUTO-CLICKER DETECTIONS</span>
-        </div>
-        <div class="admin-list" id="admin-cheaters-container"></div>
+        <div class="rule-item">• <span>Match Duration:</span> 32 seconds total.</div>
+        <div class="rule-item">• <span>Turn Timing:</span> Strictly 2-second cooldown per tap.</div>
+        <div class="rule-item">• <span>Winner:</span> Higher score wins the WLD pool & TNV.</div>
       </div>
 
       <div class="leaderboard-section">
-        <div class="lb-header">
-          <span>⚡ TNV ELITE LEADERBOARD</span>
-        </div>
+        <div class="lb-header">⚡ TNV ELITE LEADERBOARD</div>
         <div class="lb-list" id="lb-container">
-          <div class="lb-row"><span class="lb-rank">1</span><span class="lb-name">Loading...</span><span class="lb-score">0 TNV</span></div>
+          <div class="lb-row"><span class="lb-rank">1</span><span>CryptoKing</span><span style="color:var(--photon)">4,850 TNV</span></div>
+          <div class="lb-row"><span class="lb-rank">2</span><span>AirdropHunter</span><span style="color:var(--photon)">3,200 TNV</span></div>
         </div>
       </div>
-    </section>
-
-    <!-- GAMEPLAY SCREEN -->
-    <section id="game-screen" style="display: none;">
-      <div class="stats-box">
-        <div>
-          <div class="who" id="my-name-tag">ME</div>
-          <div class="score" id="my-score">0</div>
-        </div>
-        <div id="game-timer">32s</div>
-        <div>
-          <div class="who" id="opp-name-tag">OPP</div>
-          <div class="score" id="opp-score">0</div>
-        </div>
-      </div>
-
-      <div class="scene" id="dice-scene">
-        <div class="cube" id="dice-cube">
-          <div class="cube__face front"><span class="pip red"></span></div>
-          <div class="cube__face back"><div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px;"><span class="pip"></span><span class="pip"></span></div></div>
-          <div class="cube__face right"><div style="display:grid; grid-template-columns: 1fr 1fr; gap:15px;"><span class="pip"></span><span class="pip"></span><span class="pip"></span></div></div>
-          <div class="cube__face left"><div style="display:grid; grid-template-columns: 1fr 1fr; gap:15px;"><span class="pip"></span><span class="pip"></span><span class="pip"></span><span class="pip"></span></div></div>
-          <div class="cube__face top"><div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px;"><span class="pip"></span><span class="pip"></span><span class="pip"></span><span class="pip"></span><span class="pip"></span></div></div>
-          <div class="cube__face bottom"><div style="display:grid; grid-template-columns: 1fr 1fr; gap:8px;"><span class="pip"></span><span class="pip"></span><span class="pip"></span><span class="pip"></span><span class="pip"></span><span class="pip"></span></div></div>
-        </div>
-      </div>
-      <div class="tap-hint" id="turn-indicator">tap the die to roll</div>
     </section>
   </main>
+</div>
 
-  <!-- GLOBAL CHAT MODAL -->
-  <div id="chat-modal" class="custom-modal">
-    <div class="modal-card chat-card">
-      <div class="chat-header">
-        <span>💬 Community Global Chat</span>
-        <button class="chat-close-btn" onclick="closeChatModal()">✕</button>
-      </div>
-      <div id="chat-messages-container" class="chat-messages"></div>
-      <div class="chat-input-area">
-        <input type="text" id="chat-input-field" class="chat-input" placeholder="Type a message..." maxlength="150">
-        <button class="chat-send-btn" onclick="sendChatMessage()">Send</button>
-      </div>
-    </div>
-  </div>
+<!-- WAITING OVERLAY -->
+<div id="waiting-overlay">
+  <h2>SEARCHING OPPONENT...</h2>
+  <div class="scanner" style="margin-top: 30px;"><div class="core"></div></div>
+</div>
 
-  <!-- WAITING OVERLAY -->
-  <div id="waiting-overlay">
-    <h2 id="wait-status">SEARCHING...</h2>
-  </div>
-
-  <!-- RESULT OVERLAY -->
-  <div id="result-overlay">
-    <div class="result-card" id="result-card">
-      <div id="result-icon">🏆</div>
-      <h2 id="result-title">VICTORY!</h2>
-      <p id="result-msg">Rewards credited</p>
-      <button class="btn btn-primary" onclick="location.reload()">PLAY AGAIN</button>
-    </div>
+<!-- RESULT OVERLAY -->
+<div id="result-overlay">
+  <div class="result-card">
+    <div style="font-size: 36px; margin-bottom: 8px;">🏆</div>
+    <h2 style="color: var(--photon); font-family: 'Space Grotesk'; margin-bottom: 8px;">VICTORY!</h2>
+    <p style="font-size: 13px; color: var(--slate); margin-bottom: 16px;">Rewards successfully credited.</p>
+    <button class="btn-primary" onclick="location.reload()">PLAY AGAIN</button>
   </div>
 </div>
 
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="/game-logic.js"></script>
+<script>
+  function toggleSupportDropdown(e) {
+    e.stopPropagation();
+    const drop = document.getElementById('support-dropdown');
+    drop.style.display = drop.style.display === 'block' ? 'none' : 'block';
+  }
+  window.onclick = function() {
+    document.getElementById('support-dropdown').style.display = 'none';
+  }
+
+  // Chip Selection Logic
+  const chips = document.querySelectorAll('.fee-chip');
+  const startBtn = document.getElementById('start-btn');
+  chips.forEach(chip => {
+    chip.addEventListener('click', () => {
+      chips.forEach(c => c.classList.remove('active'));
+      chip.classList.add('active');
+      const fee = chip.getAttribute('data-fee');
+      startBtn.innerText = `PLAY NOW (${fee} WLD)`;
+    });
+  });
+
+  // Simulated matchmaking on Play Now
+  startBtn.addEventListener('click', () => {
+    document.getElementById('waiting-overlay').style.display = 'flex';
+    setTimeout(() => {
+      document.getElementById('waiting-overlay').style.display = 'none';
+      document.getElementById('result-overlay').style.display = 'flex';
+    }, 3000);
+  });
+</script>
 </body>
 </html>
