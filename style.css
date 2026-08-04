@@ -133,7 +133,7 @@ body {
   border: 1px solid rgba(255, 255, 255, 0.05);
   border-radius: 12px;
   padding: 14px;
-  margin-bottom: 16px;
+  margin-bottom: 12px;
 }
 
 .bal-row {
@@ -168,6 +168,13 @@ body {
   align-items: center;
   font-size: 11px;
   color: var(--slate);
+}
+
+/* Radar Animation Keyframes */
+@keyframes radarPulse {
+  0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(41, 217, 194, 0.4); }
+  70% { transform: scale(1.05); box-shadow: 0 0 0 18px rgba(41, 217, 194, 0); }
+  100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(41, 217, 194, 0); }
 }
 
 /* Fee Selector Grid */

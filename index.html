@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>TNV Duel Arena</title>
-  <link rel="stylesheet" href="style.css?v=3.0">
+  <link rel="stylesheet" href="style.css?v=3.5">
   <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;600;700&display=swap" rel="stylesheet">
 </head>
 <body>
@@ -49,6 +49,13 @@
         <div class="progress-info">
           <span id="progress-text">0 / 5,000 TNV</span>
           <button id="withdraw-btn" class="btn btn-sm" onclick="openWithdrawModal()" disabled>WITHDRAW</button>
+        </div>
+      </div>
+
+      <!-- Radar Matchmaking Visualizer -->
+      <div class="radar-container" style="display: flex; justify-content: center; align-items: center; margin: 20px 0;">
+        <div class="radar-circle" style="width: 90px; height: 90px; border: 2px solid rgba(41,217,194,0.3); border-radius: 50%; display: flex; align-items: center; justify-content: center; animation: radarPulse 2s infinite linear;">
+          <div style="width: 30px; height: 30px; background: var(--photon); border-radius: 50%; box-shadow: 0 0 15px var(--photon);"></div>
         </div>
       </div>
 
