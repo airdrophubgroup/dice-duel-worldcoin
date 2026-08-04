@@ -28,21 +28,24 @@ const $ = (id) => document.getElementById(id);
 window.addEventListener('DOMContentLoaded', async () => {
   try { MiniKit.install(WORLD_APP_ID); } catch(e) {}
 
-  // UI me sign in button inject karna agar detect nahi hua
-  injectSignInButtonIfNeeded();
-
   if (MiniKit.isInstalled()) {
-    $('landingHint').textContent = 'World App detected. Please sign in.';
-    
     let detectedAddr = MiniKit.user && MiniKit.user.walletAddress ? MiniKit.user.walletAddress : null;
     if (detectedAddr) {
       await authenticateUserSession(detectedAddr);
+    } else {
+      const landingHint = $('landingHint');
+      if (landingHint) landingHint.textContent = 'Please tap below to sign in with World ID.';
     }
   } else {
-    $('landingHint').textContent = 'Please open inside World App!';
-    $('display-username').innerText = 'World App Required';
-    $('start-btn').disabled = true;
-    $('start-btn').innerText = 'OPEN IN WORLD APP';
+    const landingHint = $('landingHint');
+    if (landingHint) landingHint.textContent = 'Please open inside World App!';
+    const displayUser = $('display-username');
+    if (displayUser) displayUser.innerText = 'World App Required';
+    const startBtn = $('start-btn');
+    if (startBtn) {
+      startBtn.disabled = true;
+      startBtn.innerText = 'OPEN IN WORLD APP';
+    }
   }
 
   initGlobalChat();
@@ -50,26 +53,14 @@ window.addEventListener('DOMContentLoaded', async () => {
   await resumeGameIfActive();
 });
 
-function injectSignInButtonIfNeeded() {
-  const landingHint = $('landingHint');
-  if (landingHint && !document.getElementById('world-signin-btn')) {
-    const signInBtn = document.createElement('button');
-    signInBtn.id = 'world-signin-btn';
-    signInBtn.className = 'btn';
-    signInBtn.style.cssText = 'margin-top: 12px; padding: 12px 24px; background: var(--photon); color: #000; font-weight: 700; border-radius: 12px; border: none; cursor: pointer; display: block; margin-left: auto; margin-right: auto;';
-    signInBtn.innerText = '🔐 SIGN IN WITH WORLD ID';
-    signInBtn.onclick = triggerWorldIDWalletAuth;
-    landingHint.parentNode.insertBefore(signInBtn, landingHint.nextSibling);
-  }
-}
-
-async function triggerWorldIDWalletAuth() {
+window.triggerWorldIDWalletAuth = async function() {
   if (!MiniKit.isInstalled()) {
     alert('Please open this app inside World App.');
     return;
   }
 
-  $('landingHint').textContent = 'Requesting World ID permission...';
+  const landingHint = $('landingHint');
+  if (landingHint) landingHint.textContent = 'Requesting World ID permission...';
 
   try {
     const { finalPayload } = await MiniKit.commandsAsync.walletAuth({
@@ -82,15 +73,15 @@ async function triggerWorldIDWalletAuth() {
 
     if (finalPayload?.status === 'success' && finalPayload?.address) {
       await authenticateUserSession(finalPayload.address);
-      const btn = document.getElementById('world-signin-btn');
-      if (btn) btn.style.display = 'none';
+      const authContainer = document.getElementById('auth-container');
+      if (authContainer) authContainer.style.display = 'none';
     } else {
       alert('Sign in permission denied or failed.');
     }
   } catch (err) {
     alert('Error during World ID sign in: ' + err.message);
   }
-}
+};
 
 async function authenticateUserSession(address) {
   realWorldIdUser = true;
@@ -98,10 +89,12 @@ async function authenticateUserSession(address) {
   setUserData(username, address);
   localStorage.setItem("myAddress", address);
   localStorage.setItem("myUsername", username);
-  $('landingHint').textContent = 'Signed in successfully!';
   
-  const btn = document.getElementById('world-signin-btn');
-  if (btn) btn.style.display = 'none';
+  const landingHint = $('landingHint');
+  if (landingHint) landingHint.textContent = 'Signed in successfully!';
+  
+  const authContainer = document.getElementById('auth-container');
+  if (authContainer) authContainer.style.display = 'none';
 
   if (address) {
     try {
