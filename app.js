@@ -29,11 +29,9 @@ window.addEventListener('DOMContentLoaded', async () => {
   try { MiniKit.install(WORLD_APP_ID); } catch(e) {}
   
   if (MiniKit.isInstalled()) {
-    $('landingHint').textContent = 'World App detected — Connecting wallet...';
-    await autoConnectWalletOnStart();
+    $('landingHint').textContent = 'World App detected — Tap Play Now to Sign In & Play';
   } else {
     $('landingHint').textContent = 'Desktop Mode (Simulation active)';
-    // Desktop browser fallback simulation
     let fakeAddress = localStorage.getItem("myAddress");
     let fakeUsername = localStorage.getItem("myUsername");
     if (!fakeAddress || !fakeAddress.startsWith('0xDEV')) {
@@ -80,32 +78,6 @@ window.addEventListener('DOMContentLoaded', async () => {
   fetchLeaderboard();
   await resumeGameIfActive();
 });
-
-// Auto Wallet Connect on MiniKit Launch
-async function autoConnectWalletOnStart() {
-  try {
-    const result = await MiniKit.walletAuth({
-      nonce: randomAlphaNumeric(24),
-      requestId: 'req_login_' + Date.now(),
-      expirationTime: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
-      notBefore: new Date(Date.now() - 60 * 1000),
-      statement: 'Sign in to TNV Duel Arena.',
-    });
-    const data = result?.data;
-    if (result?.executedWith !== 'fallback' && data?.address && data?.signature){
-      realWorldIdUser = true;
-      const username = await resolveUsername(data.address);
-      setUserData(username, data.address);
-      localStorage.setItem("myAddress", data.address);
-      localStorage.setItem("myUsername", username);
-      $('landingHint').textContent = 'Wallet Connected Successfully ✅';
-    } else {
-      $('landingHint').textContent = 'Authentication failed. Tap Play Now to retry.';
-    }
-  } catch(err) {
-    $('landingHint').textContent = 'Tap Play Now to connect wallet.';
-  }
-}
 
 window.addEventListener('beforeunload', () => {
   if (matchmakingActive && matchId && !gameActive) {
@@ -217,9 +189,7 @@ window.openChatModal = function() {
   container.scrollTop = container.scrollHeight;
 };
 
-window.closeChatModal = function() {
-  $('chat-modal').style.display = 'none';
-};
+window.closeChatModal = function() { $('chat-modal').style.display = 'none'; };
 
 window.sendChatMessage = function() {
   const input = $('chat-input-field');
@@ -263,9 +233,7 @@ window.toggleSupportDropdown = function(event) {
 
 window.addEventListener('click', () => {
   const dropdown = $('support-dropdown');
-  if (dropdown && dropdown.classList.contains('show')) {
-    dropdown.classList.remove('show');
-  }
+  if (dropdown && dropdown.classList.contains('show')) dropdown.classList.remove('show');
 });
 
 function calculatePayout(fee) {
@@ -283,53 +251,31 @@ function getTnvRewardForFee(fee) {
 
 async function fetchUserBalanceAndLeaderboard(wallet) {
   if (!wallet) return;
-  
   if (wallet.toLowerCase() === ADMIN_WALLET.toLowerCase()) {
     $('admin-panel').style.display = 'block';
     $('admin-cheaters-panel').style.display = 'block';
     if ($('admin-history-nav-btn')) $('admin-history-nav-btn').style.display = 'inline-block';
     fetchAdminWithdrawRequests();
     fetchAdminCheaters();
-  } else {
-    $('admin-panel').style.display = 'none';
-    $('admin-cheaters-panel').style.display = 'none';
-    if ($('admin-history-nav-btn')) $('admin-history-nav-btn').style.display = 'none';
   }
 
   try {
-    const { data, error } = await supabaseClient
-      .from('user_rewards')
-      .select('tnv_balance, wld_balance, is_blocked')
-      .eq('wallet_address', wallet)
-      .maybeSingle();
-
+    const { data, error } = await supabaseClient.from('user_rewards').select('tnv_balance, wld_balance, is_blocked').eq('wallet_address', wallet).maybeSingle();
     if (!error && data) {
-      if (data.is_blocked) {
-        $('blocked-screen').style.display = 'flex';
-        return;
-      } else {
-        $('blocked-screen').style.display = 'none';
-      }
+      if (data.is_blocked) { $('blocked-screen').style.display = 'flex'; return; }
       currentTnvBalance = Number(data.tnv_balance || 0);
       currentWldBalance = Number(data.wld_balance || 100);
     } else {
       await supabaseClient.from('user_rewards').upsert({ wallet_address: wallet, tnv_balance: 0, wld_balance: 100, is_blocked: false });
-      currentTnvBalance = 0;
-      currentWldBalance = 100;
+      currentTnvBalance = 0; currentWldBalance = 100;
     }
-
     $('balance-num').innerText = currentTnvBalance;
     if ($('wld-balance-num')) $('wld-balance-num').innerText = currentWldBalance.toFixed(2);
     $('progress-text').innerText = `${currentTnvBalance.toLocaleString()} / 5,000 TNV`;
     $('p-fill').style.width = Math.min(100, (currentTnvBalance / 5000) * 100) + '%';
-
-    if (currentTnvBalance >= 5000) {
-      $('withdraw-btn').removeAttribute('disabled');
-    } else {
-      $('withdraw-btn').setAttribute('disabled', 'true');
-    }
+    if (currentTnvBalance >= 5000) $('withdraw-btn').removeAttribute('disabled');
+    else $('withdraw-btn').setAttribute('disabled', 'true');
   } catch (e) {}
-
   fetchLeaderboard();
 }
 
@@ -343,136 +289,55 @@ async function logMatchHistory(wallet, type, amount, details) {
 }
 
 window.openUserHistoryModal = async function() {
-  if (!myAddress) { alert('Please connect wallet first!'); return; }
+  if (!myAddress) { alert('Please sign in first!'); return; }
   $('user-history-modal').style.display = 'flex';
   const container = $('user-history-list');
   container.innerHTML = `<div style="text-align:center; color:var(--slate);">Loading history...</div>`;
-
   try {
-    const { data, error } = await supabaseClient
-      .from('match_history').select('*').eq('wallet_address', myAddress).neq('action_type', 'ADMIN_FEE').order('created_at', { ascending: false }).limit(20);
-
-    if (error || !data || data.length === 0) {
-      container.innerHTML = `<div style="text-align:center; color:var(--slate);">No match history found yet.</div>`;
-      return;
-    }
-
+    const { data } = await supabaseClient.from('match_history').select('*').eq('wallet_address', myAddress).neq('action_type', 'ADMIN_FEE').order('created_at', { ascending: false }).limit(20);
+    if (!data || data.length === 0) { container.innerHTML = `<div style="text-align:center; color:var(--slate);">No match history found.</div>`; return; }
     let html = '';
     data.forEach(item => {
-      let timeStr = new Date(item.created_at).toLocaleString();
-      let color = 'var(--photon)';
-      if (item.action_type === 'DEFEAT') color = 'var(--signal)';
-      if (item.action_type === 'REFUND' || item.action_type === 'TIE') color = 'var(--gold)';
-
-      html += `
-        <div style="background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.08); padding:8px 10px; border-radius:8px;">
-          <div style="display:flex; justify-content:space-between; font-weight:700; color:${color};">
-            <span>${item.action_type}</span><span>${item.amount > 0 ? '+' + item.amount : item.amount} WLD</span>
-          </div>
-          <div style="color:var(--slate); font-size:10.5px; margin-top:2px;">${item.description}</div>
-          <div style="color:#777; font-size:9.5px; text-align:right; margin-top:2px;">${timeStr}</div>
-        </div>
-      `;
+      let color = item.action_type === 'DEFEAT' ? 'var(--signal)' : 'var(--photon)';
+      html += `<div style="background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.08); padding:8px 10px; border-radius:8px;"><div style="display:flex; justify-content:space-between; font-weight:700; color:${color};"><span>${item.action_type}</span><span>${item.amount} WLD</span></div><div style="color:var(--slate); font-size:10.5px;">${item.description}</div></div>`;
     });
     container.innerHTML = html;
-  } catch(e) { container.innerHTML = `<div style="text-align:center; color:var(--signal);">Failed to load history.</div>`; }
+  } catch(e) {}
 };
 
 window.closeUserHistoryModal = function() { $('user-history-modal').style.display = 'none'; };
-
 window.openUserWithdrawalsModal = async function() {
-  if (!myAddress) { alert('Please connect wallet first!'); return; }
+  if (!myAddress) { alert('Please sign in first!'); return; }
   $('user-withdrawals-modal').style.display = 'flex';
   const container = $('user-withdrawals-list');
-  container.innerHTML = `<div style="text-align:center; color:var(--slate);">Loading withdrawal requests...</div>`;
-
+  container.innerHTML = `<div style="text-align:center; color:var(--slate);">Loading requests...</div>`;
   try {
-    const { data, error } = await supabaseClient.from('withdraw_requests').select('*').eq('wallet_address', myAddress).order('created_at', { ascending: false });
-    if (error || !data || data.length === 0) {
-      container.innerHTML = `<div style="text-align:center; color:var(--slate);">No withdrawal requests found.</div>`;
-      return;
-    }
+    const { data } = await supabaseClient.from('withdraw_requests').select('*').eq('wallet_address', myAddress).order('created_at', { ascending: false });
+    if (!data || data.length === 0) { container.innerHTML = `<div style="text-align:center; color:var(--slate);">No requests found.</div>`; return; }
     let html = '';
     data.forEach(req => {
-      let timeStr = new Date(req.created_at).toLocaleString();
       let statusColor = req.status === 'approved' ? 'var(--photon)' : 'var(--gold)';
-      let statusText = req.status === 'approved' ? 'APPROVED ✅' : 'PENDING';
-      html += `
-        <div style="background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.08); padding:8px 10px; border-radius:8px;">
-          <div style="display:flex; justify-content:space-between; font-weight:700; color:${statusColor};"><span>${req.amount} TNV</span><span>${statusText}</span></div>
-          <div style="color:var(--slate); font-size:10.5px; margin-top:2px;">Requested on: ${timeStr}</div>
-        </div>
-      `;
+      html += `<div style="background:rgba(255,255,255,0.03); padding:8px; border-radius:8px;"><div style="display:flex; justify-content:space-between; color:${statusColor};"><span>${req.amount} TNV</span><span>${req.status.toUpperCase()}</span></div></div>`;
     });
     container.innerHTML = html;
   } catch(e) {}
 };
 
 window.closeUserWithdrawalsModal = function() { $('user-withdrawals-modal').style.display = 'none'; };
-
 window.openAdminEarningsModal = async function() {
   $('admin-earnings-modal').style.display = 'flex';
   const container = $('admin-earnings-list');
-  container.innerHTML = `<div style="text-align:center; color:var(--slate);">Loading admin revenue...</div>`;
+  container.innerHTML = `<div style="text-align:center; color:var(--slate);">Loading revenue...</div>`;
   try {
     const { data } = await supabaseClient.from('match_history').select('*').eq('wallet_address', ADMIN_WALLET).eq('action_type', 'ADMIN_FEE').order('created_at', { ascending: false }).limit(50);
-    if (!data || data.length === 0) { container.innerHTML = `<div style="text-align:center; color:var(--slate);">No admin fees collected yet.</div>`; return; }
-    let totalRevenue = 0, html = '';
-    data.forEach(item => {
-      totalRevenue += Number(item.amount || 0);
-      html += `<div style="background:rgba(243,156,18,0.05); border:1px solid rgba(243,156,18,0.2); padding:8px 10px; border-radius:8px;"><div style="display:flex; justify-content:space-between; font-weight:700; color:var(--gold);"><span>Fee Collected</span><span>+${item.amount} WLD</span></div></div>`;
-    });
-    container.innerHTML = `<div style="font-weight:700; color:var(--gold); margin-bottom:8px; font-size:12px;">Total Revenue: ${totalRevenue.toFixed(2)} WLD</div>` + html;
+    if (!data || data.length === 0) { container.innerHTML = `<div style="text-align:center; color:var(--slate);">No fees collected.</div>`; return; }
+    let total = 0, html = '';
+    data.forEach(i => { total += Number(i.amount || 0); html += `<div style="background:rgba(243,156,18,0.05); padding:8px; border-radius:8px;"><span style="color:var(--gold);">+${i.amount} WLD</span></div>`; });
+    container.innerHTML = `<div style="color:var(--gold); font-weight:700; margin-bottom:8px;">Total: ${total.toFixed(2)} WLD</div>` + html;
   } catch(e) {}
 };
 
 window.closeAdminEarningsModal = function() { $('admin-earnings-modal').style.display = 'none'; };
-
-async function fetchAdminWithdrawRequests() {
-  try {
-    const { data } = await supabaseClient.from('withdraw_requests').select('*').eq('status', 'pending').order('created_at', { ascending: false });
-    const container = $('admin-req-container');
-    if (!data || data.length === 0) { container.innerHTML = `<div style="font-size:11px; color:var(--slate); text-align:center;">No pending requests</div>`; return; }
-    let html = '';
-    data.forEach(req => {
-      let shortAddr = req.wallet_address.slice(0, 6) + '...' + req.wallet_address.slice(-4);
-      html += `<div class="admin-req-item"><div class="admin-req-row"><span style="color:var(--photon);">${shortAddr}</span><span style="color:var(--gold); font-weight:700;">${req.amount} TNV</span></div><button class="approve-btn" onclick="openAdminModal('${req.id}', '${req.wallet_address}', ${req.amount})">APPROVE / PAY</button></div>`;
-    });
-    container.innerHTML = html;
-  } catch(e) {}
-}
-
-async function fetchAdminCheaters() {
-  try {
-    const { data } = await supabaseClient.from('cheater_logs').select('*').order('detected_at', { ascending: false }).limit(20);
-    const container = $('admin-cheaters-container');
-    if (!data || data.length === 0) { container.innerHTML = `<div style="font-size:11px; color:var(--slate); text-align:center;">No suspicious activity</div>`; return; }
-    let html = '';
-    data.forEach(log => {
-      let shortAddr = log.wallet_address.slice(0, 6) + '...' + log.wallet_address.slice(-4);
-      html += `<div class="admin-req-item"><div class="admin-req-row"><span style="color:var(--signal);">${shortAddr}</span><span style="color:var(--gold); font-weight:600;">Attempts: ${log.click_count}x</span></div></div>`;
-    });
-    container.innerHTML = html;
-  } catch(e) {}
-}
-
-window.openAdminModal = function(reqId, userWallet, amount) {
-  activeAdminReqId = reqId;
-  $('admin-modal-info').innerText = `Paying ${amount} TNV to ${userWallet.slice(0,6)}...${userWallet.slice(-4)}`;
-  $('admin-tx-input').value = "";
-  $('admin-approve-modal').style.display = 'flex';
-};
-
-window.closeAdminModal = function() { $('admin-approve-modal').style.display = 'none'; };
-
-window.confirmAdminApproval = async function() {
-  let txProof = $('admin-tx-input').value.trim();
-  if (!txProof) { alert('Enter Tx Hash'); return; }
-  await supabaseClient.from('withdraw_requests').update({ status: 'approved', tx_hash: txProof }).eq('id', activeAdminReqId);
-  alert('Approved successfully!');
-  closeAdminModal();
-  fetchAdminWithdrawRequests();
-};
 
 async function fetchLeaderboard() {
   try {
@@ -492,7 +357,7 @@ async function fetchLeaderboard() {
 window.openWithdrawModal = function() {
   if (currentTnvBalance < 5000) { alert('Min 5,000 TNV required!'); return; }
   $('modal-bal').innerText = currentTnvBalance;
-  $('withdraw-input-container').style.display = currentTnvBalance > 5000 ? 'block' : 'none';
+  $('withdraw-input-container').style.display = 'block';
   $('withdraw-amount-input').value = currentTnvBalance;
   $('withdraw-modal').style.display = 'flex';
 };
@@ -524,14 +389,11 @@ async function resumeGameIfActive() {
   if (!savedMatchId) return;
 
   try {
-    const { data, error } = await supabaseClient.from('matches').select('*').eq('id', savedMatchId).single();
-    if (!error && data && data.status === 'playing') {
+    const { data } = await supabaseClient.from('matches').select('*').eq('id', savedMatchId).single();
+    if (data && data.status === 'playing') {
       matchId = savedMatchId;
       isP1 = localStorage.getItem("isP1") === "true";
-      myAddress = localStorage.getItem("myAddress") || "";
-      myUsername = localStorage.getItem("myUsername") || "";
       selectedFee = Number(data.fee || 0.5);
-      realWorldIdUser = true;
       gameActive = true;
       myScore = isP1 ? data.p1_score : data.p2_score;
       oppScore = isP1 ? data.p2_score : data.p1_score;
@@ -576,20 +438,45 @@ async function resolveUsername(address){
   return '@WLD_' + address.substring(2, 8);
 }
 
-// 1. Play Button Click triggers Payment Request via MiniKit pay command
+// 1. PLAY BUTTON: FIRST SIGN IN VIA MINIKIT, THEN TRIGGER PAYMENT, THEN MATCHMAKING
 async function handlePlayButtonClick(){
   if (matchmakingActive) return;
 
-  if (!myAddress) {
-    alert('Connecting wallet... Please wait a moment.');
-    await autoConnectWalletOnStart();
-    if (!myAddress) return;
+  // Step A: Sign In / Wallet Auth if not connected
+  if (!realWorldIdUser || !myAddress) {
+    if (MiniKit.isInstalled()) {
+      try {
+        const result = await MiniKit.walletAuth({
+          nonce: randomAlphaNumeric(24),
+          requestId: 'req_login_' + Date.now(),
+          expirationTime: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+          notBefore: new Date(Date.now() - 60 * 1000),
+          statement: 'Sign in to TNV Duel Arena.',
+        });
+        const data = result?.data;
+        if (result?.executedWith !== 'fallback' && data?.address && data?.signature){
+          realWorldIdUser = true;
+          const username = await resolveUsername(data.address);
+          setUserData(username, data.address);
+          localStorage.setItem("myAddress", data.address);
+          localStorage.setItem("myUsername", username);
+        } else {
+          alert("Sign-in cancelled or failed.");
+          return;
+        }
+      } catch(err) {
+        alert("Wallet authentication error.");
+        return;
+      }
+    } else {
+      realWorldIdUser = true;
+    }
   }
 
-  // Trigger Official MiniKit Payment Request popup for selected bet fee
+  // Step B: Trigger Official MiniKit Payment Request popup
   if (MiniKit.isInstalled()) {
     try {
-      const payload = {
+      const paymentPayload = {
         reference: 'ref_' + Date.now(),
         to: ADMIN_WALLET,
         tokens: [
@@ -601,7 +488,7 @@ async function handlePlayButtonClick(){
         description: `TNV Duel Arena Bet: ${selectedFee} WLD`,
       };
 
-      const res = await MiniKit.commandsAsync.pay(payload);
+      const res = await MiniKit.commandsAsync.pay(paymentPayload);
       const response = res?.finalPayload || res?.result || res;
 
       if (!response || (response.status && response.status !== "success")) {
@@ -617,7 +504,7 @@ async function handlePlayButtonClick(){
       return;
     }
   } else {
-    // Desktop simulation deduction
+    // Desktop simulation fallback
     const { data: usrData } = await supabaseClient.from('user_rewards').select('wld_balance').eq('wallet_address', myAddress).maybeSingle();
     let currentWld = Number(usrData?.wld_balance || 100);
     if (currentWld < selectedFee) {
@@ -627,7 +514,7 @@ async function handlePlayButtonClick(){
     await supabaseClient.from('user_rewards').update({ wld_balance: Number((currentWld - selectedFee).toFixed(2)) }).eq('wallet_address', myAddress);
   }
 
-  // After successful payment, start matchmaking
+  // Step C: Start Matchmaking after successful Sign-In & Payment
   initMatchmakingAfterPayment();
 }
 
@@ -679,9 +566,7 @@ async function initMatchmakingAfterPayment(){
     timeLeft--;
     if (timeLeft <= 0){
       clearInterval(mTimer);
-      if (!gameActive){
-        await cancelMatchmaking(false);
-      }
+      if (!gameActive) await cancelMatchmaking(false);
     }
   }, 1000);
 
@@ -704,7 +589,6 @@ async function initMatchmakingAfterPayment(){
 
 async function cancelMatchmaking(showAlert = true) {
   if (!matchmakingActive || gameActive) return;
-
   if (matchId) {
     try {
       await supabaseClient.from('matches').delete().eq('id', matchId).eq('status', 'waiting');
@@ -722,7 +606,6 @@ async function checkBothReady(){
   if (data.status === 'matched' || data.status === 'playing'){
     if (pollTimer) clearInterval(pollTimer);
     $('opp-name-tag').innerText = (isP1 ? data.p2_username : data.p1_username) || 'OPP';
-
     localStorage.setItem("currentMatchId", matchId);
     localStorage.setItem("isP1", isP1);
 
@@ -766,9 +649,7 @@ async function runTimer(startTime = null){
         const elapsed = Math.floor((Date.now() - new Date(startTime).getTime()) / 1000);
         const remaining = 32 - elapsed;
         $("game-timer").innerText = Math.max(remaining, 0) + "s";
-
         if (remaining <= 2) $('turn-indicator').innerText = 'Calculating winner...';
-
         if (remaining <= 0) {
             clearInterval(gameTimerInterval);
             if (isP1) channel.send({ type: "broadcast", event: "game_force_end" });
@@ -797,13 +678,11 @@ async function rollDice(){
   channel.send({ type: 'broadcast', event: 'score_update', payload: { sender: myAddress, score: myScore } });
   
   const { data: rpcRes, error: rpcErr } = await supabaseClient.rpc('secure_roll_dice', {
-    p_match_id: matchId,
-    p_wallet: myAddress,
-    p_roll: roll
+    p_match_id: matchId, p_wallet: myAddress, p_roll: roll
   });
 
   if (rpcErr || (rpcRes && !rpcRes.success)) {
-    console.warn("Roll rejected by secure server check");
+    console.warn("Roll rejected");
   } else if (rpcRes && rpcRes.taps_left !== undefined) {
     myTurnsLeft = rpcRes.taps_left;
   }
@@ -824,8 +703,8 @@ async function finalizeGame(){
   localStorage.removeItem("currentMatchId");
   localStorage.removeItem("isP1");
 
-  const { data: m, error: readError } = await supabaseClient.from('matches').select('*').eq('id', matchId).single();
-  if (readError || !m) { resetToHome(); return; }
+  const { data: m } = await supabaseClient.from('matches').select('*').eq('id', matchId).single();
+  if (!m) { resetToHome(); return; }
 
   let finalRow = m;
   let matchFee = Number(m.fee || selectedFee);
@@ -838,39 +717,30 @@ async function finalizeGame(){
     const { data: updated } = await supabaseClient
       .from('matches')
       .update({ status: 'completed', winner_address: winnerAddress, winner_username: winnerUsername, payout_amount: payout })
-      .eq('id', matchId)
-      .eq('status', 'playing')
-      .select()
-      .single();
-
+      .eq('id', matchId).eq('status', 'playing').select().single();
     if (updated) finalRow = updated;
   }
 
   const myFinal = isP1 ? finalRow.p1_score : finalRow.p2_score;
   const opFinal = isP1 ? finalRow.p2_score : finalRow.p1_score;
-
   const isWin = myFinal > opFinal;
-  const isLoss = myFinal < opFinal;
 
   const exactChipEarn = calculatePayout(matchFee); 
   const totalPool = Number((matchFee * 2).toFixed(2)); 
   const adminFeeAmount = Number(Math.max(0, totalPool - exactChipEarn).toFixed(2)); 
 
-  const settlementKey = `settled_${matchId}_${myAddress}`;
-  if (myAddress && !sessionStorage.getItem(settlementKey)) {
-      sessionStorage.setItem(settlementKey, "true");
+  if (myAddress && !sessionStorage.getItem(`settled_${matchId}_${myAddress}`)) {
+      sessionStorage.setItem(`settled_${matchId}_${myAddress}`, "true");
       try {
           const { data: usrData } = await supabaseClient.from('user_rewards').select('wld_balance').eq('wallet_address', myAddress).maybeSingle();
           const currentWld = Number(usrData?.wld_balance || 0);
 
           if (isWin) {
-              let newWinnerWld = Number((currentWld + exactChipEarn).toFixed(2));
-              await supabaseClient.from('user_rewards').update({ wld_balance: newWinnerWld }).eq('wallet_address', myAddress);
+              await supabaseClient.from('user_rewards').update({ wld_balance: Number((currentWld + exactChipEarn).toFixed(2)) }).eq('wallet_address', myAddress);
               await logMatchHistory(myAddress, 'VICTORY', exactChipEarn, `Won match (${matchFee} WLD duel)`);
 
               const { data: adminData } = await supabaseClient.from('user_rewards').select('wld_balance').eq('wallet_address', ADMIN_WALLET).maybeSingle();
-              let newAdminWld = Number((Number(adminData?.wld_balance || 0) + adminFeeAmount).toFixed(2));
-              await supabaseClient.from('user_rewards').update({ wld_balance: newAdminWld }).eq('wallet_address', ADMIN_WALLET);
+              await supabaseClient.from('user_rewards').update({ wld_balance: Number((Number(adminData?.wld_balance || 0) + adminFeeAmount).toFixed(2)) }).eq('wallet_address', ADMIN_WALLET);
               await logMatchHistory(ADMIN_WALLET, 'ADMIN_FEE', adminFeeAmount, `Platform fee from match`);
           } else {
               await logMatchHistory(myAddress, 'DEFEAT', -matchFee, `Lost match (${matchFee} WLD duel)`);
