@@ -774,19 +774,56 @@ function setupChannel() {
 }
 
 async function initMatchmaking(){
-  const { data: wldData } = await supabaseClient.from('user_rewards').select('wld_balance').eq('wallet_address', myAddress).maybeSingle();
-  let currentWld = Number(wldData ? wldData.wld_balance : 100);
+  if (MiniKit.isInstalled()) {
+    try {
+      const paymentPayload = {
+        reference: 'ref_' + Date.now(),
+        to: ADMIN_WALLET,
+        tokens: [
+          {
+            symbol: "WLD",
+            token_amount: selectedFee.toString(),
+          },
+        ],
+        description: `TNV Duel Arena Bet: ${selectedFee} WLD`,
+      };
 
-  if (currentWld < selectedFee) {
-      alert(`Insufficient Test WLD! Aapke paas ${currentWld.toFixed(2)} WLD hain, aur entry fee ${selectedFee} WLD hai.`);
+      const res = await MiniKit.commandsAsync.pay(paymentPayload);
+      const response = res?.result;
+
+      if (!response || response.status !== "success") {
+        alert("Payment cancelled or failed in World App.");
+        resetToHome();
+        return;
+      }
+
+      await logMatchHistory(ADMIN_WALLET, 'ADMIN_FEE', selectedFee, `Entry fee payment from ${myUsername || myAddress}`);
+
+    } catch (err) {
+      if (!MiniKit.isInstalled()) {
+        const { data: wldData } = await supabaseClient.from('user_rewards').select('wld_balance').eq('wallet_address', myAddress).maybeSingle();
+        let currentWld = Number(wldData ? wldData.wld_balance : 100);
+        if (currentWld < selectedFee) {
+          alert(`Insufficient Test WLD! Balance: ${currentWld.toFixed(2)}, Required: ${selectedFee}`);
+          resetToHome();
+          return;
+        }
+        await supabaseClient.from('user_rewards').update({ wld_balance: Number((currentWld - selectedFee).toFixed(2)) }).eq('wallet_address', myAddress);
+      } else {
+        resetToHome();
+        return;
+      }
+    }
+  } else {
+    const { data: wldData } = await supabaseClient.from('user_rewards').select('wld_balance').eq('wallet_address', myAddress).maybeSingle();
+    let currentWld = Number(wldData ? wldData.wld_balance : 100);
+    if (currentWld < selectedFee) {
+      alert(`Insufficient Test WLD! Balance: ${currentWld.toFixed(2)}, Required: ${selectedFee}`);
       resetToHome();
       return;
+    }
+    await supabaseClient.from('user_rewards').update({ wld_balance: Number((currentWld - selectedFee).toFixed(2)) }).eq('wallet_address', myAddress);
   }
-  
-  let newWld = Number((currentWld - selectedFee).toFixed(2));
-  await supabaseClient.from('user_rewards')
-      .update({ wld_balance: newWld })
-      .eq('wallet_address', myAddress);
 
   matchmakingActive = true;
   $('start-btn').disabled = true;
