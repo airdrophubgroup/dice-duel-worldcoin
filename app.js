@@ -28,36 +28,92 @@ const $ = (id) => document.getElementById(id);
 window.addEventListener('DOMContentLoaded', async () => {
   try { MiniKit.install(WORLD_APP_ID); } catch(e) {}
 
-  let detectedAddr = null;
-  
   if (MiniKit.isInstalled()) {
-    detectedAddr = MiniKit.user && MiniKit.user.walletAddress ? MiniKit.user.walletAddress : null;
+    // Check if user session already cached in MiniKit or localStorage
+    let cachedAddr = (MiniKit.user && MiniKit.user.walletAddress) ? MiniKit.user.walletAddress : localStorage.getItem("myAddress");
+    if (cachedAddr) {
+      await authenticateUserSession(cachedAddr);
+    } else {
+      const landingHint = $('landingHint');
+      if (landingHint) landingHint.textContent = 'Tap below to connect with World ID.';
+    }
+  } else {
+    const landingHint = $('landingHint');
+    if (landingHint) landingHint.textContent = 'Please open inside World App!';
+    const displayUser = $('display-username');
+    if (displayUser) displayUser.innerText = 'World App Required';
+    const startBtn = $('start-btn');
+    if (startBtn) {
+      startBtn.disabled = true;
+      startBtn.innerText = 'OPEN IN WORLD APP';
+    }
   }
 
-  // Agar MiniKit se turant address na mile, toh localStorage ya safe fallback use karein taaki game crash na ho
-  if (!detectedAddr) {
-    detectedAddr = localStorage.getItem("myAddress");
+  initGlobalChat();
+  fetchLeaderboard();
+  await resumeGameIfActive();
+});
+
+window.triggerWorldIDWalletAuth = async function() {
+  const landingHint = $('landingHint');
+
+  // Agar testing ke liye browser me hain toh bypass karke admin/test mode dedein
+  if (!MiniKit.isInstalled()) {
+    if (landingHint) landingHint.textContent = 'Browser Mode Active (Admin Connected)';
+    await authenticateUserSession(ADMIN_WALLET);
+    return;
   }
 
-  if (!detectedAddr) {
-    // Agar app admin ke taur par khul rahi hai ya normal user hai, toh valid session assign karein
-    detectedAddr = ADMIN_WALLET; // Testing ke liye admin, ya aap random user bhi rakh sakte hain
-  }
+  if (landingHint) landingHint.textContent = 'Requesting World ID permission...';
 
-  const username = (MiniKit.user && MiniKit.user.username) ? '@' + MiniKit.user.username : '@TNV_Player';
-  setUserData(username, detectedAddr);
-  localStorage.setItem("myAddress", detectedAddr);
+  try {
+    const nonceVal = randomAlphaNumeric(24);
+    const result = await MiniKit.commandsAsync.walletAuth({
+      nonce: nonceVal,
+      requestId: 'req_login_' + Date.now(),
+      expirationTime: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+      notBefore: new Date(Date.now() - 60 * 1000),
+      statement: 'Sign in to TNV Duel Arena to play & earn.',
+    });
+
+    // Handle standard MiniKit response object
+    const payload = result?.finalPayload || result;
+    if (payload?.status === 'success' && payload?.address) {
+      await authenticateUserSession(payload.address);
+    } else {
+      // Fallback if bridge returns object differently
+      if (MiniKit.user && MiniKit.user.walletAddress) {
+        await authenticateUserSession(MiniKit.user.walletAddress);
+      } else {
+        alert('Wallet connection failed or request was cancelled.');
+        if (landingHint) landingHint.textContent = 'Connection failed. Tap to retry.';
+      }
+    }
+  } catch (err) {
+    alert('Error during authentication: ' + err.message);
+    if (landingHint) landingHint.textContent = 'Sign in failed. Tap to retry.';
+  }
+};
+
+async function authenticateUserSession(address) {
+  realWorldIdUser = true;
+  const username = (MiniKit.user && MiniKit.user.username) ? '@' + MiniKit.user.username : await resolveUsername(address);
+  setUserData(username, address);
+  localStorage.setItem("myAddress", address);
   localStorage.setItem("myUsername", username);
-
+  
+  const landingHint = $('landingHint');
+  if (landingHint) landingHint.textContent = 'Signed in successfully!';
+  
   const authContainer = document.getElementById('auth-container');
   if (authContainer) authContainer.style.display = 'none';
 
-  if (detectedAddr) {
+  if (address) {
     try {
       const { data: stuckMatches } = await supabaseClient
         .from('matches')
         .select('*')
-        .or(`p1_address.eq.${detectedAddr},p2_address.eq.${detectedAddr}`)
+        .or(`p1_address.eq.${address},p2_address.eq.${address}`)
         .eq('status', 'waiting');
 
       if (stuckMatches && stuckMatches.length > 0) {
@@ -80,44 +136,7 @@ window.addEventListener('DOMContentLoaded', async () => {
     cancelBtn.onclick = () => cancelMatchmaking(true);
     waitingOverlay.appendChild(cancelBtn);
   }
-
-  initGlobalChat();
-  fetchLeaderboard();
-  await resumeGameIfActive();
-});
-
-window.triggerWorldIDWalletAuth = async function() {
-  const landingHint = $('landingHint');
-  if (landingHint) landingHint.textContent = 'Connecting session...';
-
-  try {
-    if (MiniKit.isInstalled()) {
-      const { finalPayload } = await MiniKit.commandsAsync.walletAuth({
-        nonce: randomAlphaNumeric(24),
-        requestId: 'req_login_' + Date.now(),
-        expirationTime: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
-        notBefore: new Date(Date.now() - 60 * 1000),
-        statement: 'Sign in to TNV Duel Arena to play & earn.',
-      });
-
-      if (finalPayload?.status === 'success' && finalPayload?.address) {
-        setUserData(MiniKit.user?.username ? '@' + MiniKit.user.username : '@Player', finalPayload.address);
-        const authContainer = document.getElementById('auth-container');
-        if (authContainer) authContainer.style.display = 'none';
-        return;
-      }
-    }
-    
-    // Smooth fallback agar popup cancel ho ya fail ho
-    setUserData('@TNV_Player', ADMIN_WALLET);
-    const authContainer = document.getElementById('auth-container');
-    if (authContainer) authContainer.style.display = 'none';
-  } catch (err) {
-    setUserData('@TNV_Player', ADMIN_WALLET);
-    const authContainer = document.getElementById('auth-container');
-    if (authContainer) authContainer.style.display = 'none';
-  }
-};
+}
 
 window.addEventListener('beforeunload', () => {
   if (matchmakingActive && matchId && !gameActive) {
@@ -473,6 +492,15 @@ function randomAlphaNumeric(len){
   let out = '';
   for (let i = 0; i < len; i++) out += chars[bytes[i] % chars.length];
   return out;
+}
+
+async function resolveUsername(address){
+  try{
+    if (MiniKit.user && MiniKit.user.username) return '@' + MiniKit.user.username;
+    const profile = await MiniKit.getUserByAddress(address);
+    if (profile && profile.username) return '@' + profile.username;
+  }catch(e){}
+  return '@W_' + address.substring(2, 8);
 }
 
 // ----------------------------------------------------
