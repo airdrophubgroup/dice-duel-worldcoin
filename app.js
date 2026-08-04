@@ -444,6 +444,13 @@ async function resolveUsername(address){
 // STEP 1: WALLET SIGN-IN (auto on load inside World App, or manual before PLAY NOW)
 // Returns true only if the user is actually signed in with a real wallet address.
 // ----------------------------------------------------
+function showAuthBanner(msg){
+  const el = $('auth-banner');
+  if (!el) return;
+  el.textContent = '⚠️ ' + msg;
+  el.style.display = 'block';
+}
+
 async function performWalletAuth(silent = false){
   if (!MiniKit.isInstalled()) return false;
   if (myAddress && realWorldIdUser) return true; // already signed in
@@ -467,9 +474,11 @@ async function performWalletAuth(silent = false){
       return true;
     }
 
+    showAuthBanner(`Sign-in did not complete (executedWith: ${result?.executedWith || 'unknown'}, data: ${JSON.stringify(data)})`);
     if (!silent) alert("Sign-in cancelled or failed.");
     return false;
   } catch (err) {
+    showAuthBanner(`Wallet auth error: ${err?.message || String(err)}`);
     if (!silent) alert("Wallet authentication error.");
     return false;
   }
