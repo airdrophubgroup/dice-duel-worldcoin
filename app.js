@@ -29,7 +29,7 @@ window.addEventListener('DOMContentLoaded', async () => {
   try { MiniKit.install(WORLD_APP_ID); } catch(e) {}
 
   if (MiniKit.isInstalled()) {
-    $('landingHint').textContent = 'World App detected — signing in...';
+    $('landingHint').textContent = 'Connecting with World App...';
     
     let detectedAddr = MiniKit.user && MiniKit.user.walletAddress ? MiniKit.user.walletAddress : null;
     
@@ -48,29 +48,24 @@ window.addEventListener('DOMContentLoaded', async () => {
       } catch (e) {}
     }
 
-    if (!detectedAddr) {
-      detectedAddr = localStorage.getItem("myAddress");
+    if (detectedAddr) {
+      realWorldIdUser = true;
+      const username = (MiniKit.user && MiniKit.user.username) ? '@' + MiniKit.user.username : await resolveUsername(detectedAddr);
+      setUserData(username, detectedAddr);
+      localStorage.setItem("myAddress", detectedAddr);
+      localStorage.setItem("myUsername", username);
+    } else {
+      $('landingHint').textContent = 'Please open inside World App!';
+      alert('Wallet connection failed. Please reopen inside World App.');
     }
-
-    if (!detectedAddr) {
-      const randomHex = Math.floor(Math.random() * 100000).toString(16);
-      detectedAddr = '0xWLD000000000000000000000000000' + randomHex;
-    }
-
-    realWorldIdUser = true;
-    const username = (MiniKit.user && MiniKit.user.username) ? '@' + MiniKit.user.username : await resolveUsername(detectedAddr);
-    setUserData(username, detectedAddr);
-    localStorage.setItem("myAddress", detectedAddr);
-    localStorage.setItem("myUsername", username);
-
   } else {
-    $('landingHint').textContent = 'Desktop Mode (Restricted Access)';
-    let savedAddr = localStorage.getItem("myAddress") || "0x0000000000000000000000000000000000000000";
-    let savedUser = localStorage.getItem("myUsername") || "@GuestPlayer";
-    setUserData(savedUser, savedAddr);
+    $('landingHint').textContent = 'Please open inside World App!';
+    $('display-username').innerText = 'World App Required';
+    $('start-btn').disabled = true;
+    $('start-btn').innerText = 'OPEN IN WORLD APP';
   }
 
-  if (myAddress && myAddress !== "0x0000000000000000000000000000000000000000") {
+  if (myAddress) {
     try {
       const { data: stuckMatches } = await supabaseClient
         .from('matches')
@@ -276,6 +271,8 @@ function getTnvRewardForFee(fee) {
 
 async function fetchUserBalanceAndLeaderboard(wallet) {
   if (!wallet) return;
+  
+  // MATCH ADMIN WALLET: Opens admin panel automatically if connected wallet is admin
   if (wallet.toLowerCase() === ADMIN_WALLET.toLowerCase()) {
     $('admin-panel').style.display = 'block';
     $('admin-cheaters-panel').style.display = 'block';
@@ -377,7 +374,7 @@ async function fetchLeaderboard() {
     let html = '';
     data.forEach((row, index) => {
       let rankClass = index === 0 ? 'top-1' : (index === 1 ? 'top-2' : (index === 2 ? 'top-3' : ''));
-      let shortWallet = row.wallet_address.startsWith('0xDEV') || row.wallet_address.startsWith('0xWLD') ? 'User_' + row.wallet_address.slice(-4) : row.wallet_address.slice(0, 6) + '...' + row.wallet_address.slice(-4);
+      let shortWallet = row.wallet_address.slice(0, 6) + '...' + row.wallet_address.slice(-4);
       html += `<div class="lb-item ${rankClass}"><span class="lb-rank">#${index + 1}</span><span class="lb-user">${shortWallet}</span><span class="lb-score">${row.tnv_balance} TNV</span></div>`;
     });
     lbContainer.innerHTML = html;
@@ -475,7 +472,7 @@ async function handlePlayButtonClick(){
   if (matchmakingActive) return;
 
   if (!myAddress) {
-    alert('User not initialized. Please refresh.');
+    alert('Please open inside World App.');
     return;
   }
 
