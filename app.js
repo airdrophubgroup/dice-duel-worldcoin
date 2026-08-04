@@ -1,4 +1,4 @@
-import { MiniKit, Tokens, tokenToDecimals } from "https://cdn.jsdelivr.net/npm/@worldcoin/minikit-js@latest/+esm";
+import { MiniKit, Tokens, tokenToDecimals } from "https://cdn.jsdelivr.net/npm/@worldcoin/minikit-js@1.9.6/+esm";
 import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm";
 
 const SB_URL = "https://efmkazyrxllcyvcwmewd.supabase.co";
@@ -456,7 +456,7 @@ async function performWalletAuth(silent = false){
   if (myAddress && realWorldIdUser) return true; // already signed in
 
   try {
-    const result = await MiniKit.walletAuth({
+    const { finalPayload } = await MiniKit.commandsAsync.walletAuth({
       nonce: randomAlphaNumeric(24),
       requestId: 'req_login_' + Date.now(),
       expirationTime: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
@@ -464,17 +464,16 @@ async function performWalletAuth(silent = false){
       statement: 'Sign in to TNV Duel Arena.',
     });
 
-    const data = result?.data;
-    if (result?.executedWith !== 'fallback' && data?.address && data?.signature){
+    if (finalPayload?.status === 'success' && finalPayload?.address){
       realWorldIdUser = true;
-      const username = await resolveUsername(data.address);
-      setUserData(username, data.address);
-      localStorage.setItem("myAddress", data.address);
+      const username = await resolveUsername(finalPayload.address);
+      setUserData(username, finalPayload.address);
+      localStorage.setItem("myAddress", finalPayload.address);
       localStorage.setItem("myUsername", username);
       return true;
     }
 
-    showAuthBanner(`Sign-in did not complete (executedWith: ${result?.executedWith || 'unknown'}, data: ${JSON.stringify(data)})`);
+    showAuthBanner(`Sign-in did not complete (status: ${finalPayload?.status || 'unknown'})`);
     if (!silent) alert("Sign-in cancelled or failed.");
     return false;
   } catch (err) {
@@ -520,9 +519,8 @@ async function handlePlayButtonClick(){
         description: `TNV Duel Arena Bet: ${selectedFee} WLD`,
       };
 
-      const payResult = await MiniKit.pay(paymentPayload);
-      const status = payResult?.data?.status ?? payResult?.finalPayload?.status;
-      paymentSuccessful = (status === 'success');
+      const { finalPayload } = await MiniKit.commandsAsync.pay(paymentPayload);
+      paymentSuccessful = (finalPayload?.status === 'success');
 
     } catch (err) {
       console.warn("Payment error:", err);
