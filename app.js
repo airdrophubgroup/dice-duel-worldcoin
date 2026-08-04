@@ -776,7 +776,7 @@ function setupChannel() {
 async function initMatchmaking(){
   if (MiniKit.isInstalled()) {
     try {
-      const paymentPayload = {
+      const payload = {
         reference: 'ref_' + Date.now(),
         to: ADMIN_WALLET,
         tokens: [
@@ -788,11 +788,11 @@ async function initMatchmaking(){
         description: `TNV Duel Arena Bet: ${selectedFee} WLD`,
       };
 
-      const res = await MiniKit.commandsAsync.pay(paymentPayload);
+      const res = await MiniKit.commandsAsync.pay(payload);
       const response = res?.finalPayload || res?.result;
 
       if (!response || response.status !== "success") {
-        alert("Payment cancelled or failed in World App.");
+        alert("Payment was cancelled or failed in World App.");
         resetToHome();
         return;
       }
@@ -800,15 +800,10 @@ async function initMatchmaking(){
       await logMatchHistory(ADMIN_WALLET, 'ADMIN_FEE', selectedFee, `Entry fee payment from ${myUsername || myAddress}`);
 
     } catch (err) {
-      console.warn("MiniKit payment execution error:", err);
-      const { data: wldData } = await supabaseClient.from('user_rewards').select('wld_balance').eq('wallet_address', myAddress).maybeSingle();
-      let currentWld = Number(wldData ? wldData.wld_balance : 100);
-      if (currentWld < selectedFee) {
-        alert(`Insufficient Test WLD! Balance: ${currentWld.toFixed(2)}, Required: ${selectedFee}`);
-        resetToHome();
-        return;
-      }
-      await supabaseClient.from('user_rewards').update({ wld_balance: Number((currentWld - selectedFee).toFixed(2)) }).eq('wallet_address', myAddress);
+      console.warn("MiniKit payment prompt error:", err);
+      alert("Payment request could not be completed. Please ensure you are inside World App.");
+      resetToHome();
+      return;
     }
   } else {
     const { data: wldData } = await supabaseClient.from('user_rewards').select('wld_balance').eq('wallet_address', myAddress).maybeSingle();
