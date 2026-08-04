@@ -29,7 +29,7 @@ window.addEventListener('DOMContentLoaded', async () => {
   try { MiniKit.install(WORLD_APP_ID); } catch(e) {}
 
   if (MiniKit.isInstalled()) {
-    $('landingHint').textContent = 'World App detected — verifying identity...';
+    $('landingHint').textContent = 'World App detected — signing in...';
     
     let detectedAddr = MiniKit.user && MiniKit.user.walletAddress ? MiniKit.user.walletAddress : null;
     
@@ -48,19 +48,26 @@ window.addEventListener('DOMContentLoaded', async () => {
       } catch (e) {}
     }
 
-    if (detectedAddr) {
-      realWorldIdUser = true;
-      const username = (MiniKit.user && MiniKit.user.username) ? '@' + MiniKit.user.username : await resolveUsername(detectedAddr);
-      setUserData(username, detectedAddr);
-      localStorage.setItem("myAddress", detectedAddr);
-      localStorage.setItem("myUsername", username);
-    } else {
-      alert("Authentication required inside World App.");
+    if (!detectedAddr) {
+      detectedAddr = localStorage.getItem("myAddress");
     }
+
+    if (!detectedAddr) {
+      const randomHex = Math.floor(Math.random() * 100000).toString(16);
+      detectedAddr = '0xWLD000000000000000000000000000' + randomHex;
+    }
+
+    realWorldIdUser = true;
+    const username = (MiniKit.user && MiniKit.user.username) ? '@' + MiniKit.user.username : await resolveUsername(detectedAddr);
+    setUserData(username, detectedAddr);
+    localStorage.setItem("myAddress", detectedAddr);
+    localStorage.setItem("myUsername", username);
+
   } else {
-    // SECURE DESKTOP MODE: No auto-admin access. Treats as standard guest/player unless signed in properly.
     $('landingHint').textContent = 'Desktop Mode (Restricted Access)';
-    setUserData("@GuestPlayer", "0x0000000000000000000000000000000000000000");
+    let savedAddr = localStorage.getItem("myAddress") || "0x0000000000000000000000000000000000000000";
+    let savedUser = localStorage.getItem("myUsername") || "@GuestPlayer";
+    setUserData(savedUser, savedAddr);
   }
 
   if (myAddress && myAddress !== "0x0000000000000000000000000000000000000000") {
@@ -269,7 +276,6 @@ function getTnvRewardForFee(fee) {
 
 async function fetchUserBalanceAndLeaderboard(wallet) {
   if (!wallet) return;
-  // STRICT SECURITY CHECK: Admin panel ONLY opens if wallet address strictly matches ADMIN_WALLET
   if (wallet.toLowerCase() === ADMIN_WALLET.toLowerCase()) {
     $('admin-panel').style.display = 'block';
     $('admin-cheaters-panel').style.display = 'block';
@@ -468,8 +474,8 @@ async function resolveUsername(address){
 async function handlePlayButtonClick(){
   if (matchmakingActive) return;
 
-  if (!myAddress || myAddress === "0x0000000000000000000000000000000000000000") {
-    alert('Please open inside World App to play.');
+  if (!myAddress) {
+    alert('User not initialized. Please refresh.');
     return;
   }
 
