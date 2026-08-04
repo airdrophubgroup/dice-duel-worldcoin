@@ -29,31 +29,44 @@ window.addEventListener('DOMContentLoaded', async () => {
   try { MiniKit.install(WORLD_APP_ID); } catch(e) {}
 
   if (MiniKit.isInstalled()) {
-    $('landingHint').textContent = 'World App detected — signing in...';
+    $('landingHint').textContent = 'World App detected — detecting wallet...';
     
-    // Strict World App Real User Authentication (No fake fallbacks for real users)
-    const signedIn = await performWalletAuth(true);
+    let detectedAddr = MiniKit.user && MiniKit.user.walletAddress ? MiniKit.user.walletAddress : null;
     
-    if (!signedIn) {
+    if (!detectedAddr) {
       try {
-        if (MiniKit.user && MiniKit.user.walletAddress) {
-          realWorldIdUser = true;
-          const userAddr = MiniKit.user.walletAddress;
-          const username = MiniKit.user.username ? '@' + MiniKit.user.username : await resolveUsername(userAddr);
-          setUserData(username, userAddr);
-        } else {
-          await performWalletAuth(false);
+        const { finalPayload } = await MiniKit.commandsAsync.walletAuth({
+          nonce: randomAlphaNumeric(24),
+          requestId: 'req_login_' + Date.now(),
+          expirationTime: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+          notBefore: new Date(Date.now() - 60 * 1000),
+          statement: 'Sign in to TNV Duel Arena.',
+        });
+        if (finalPayload?.status === 'success' && finalPayload?.address) {
+          detectedAddr = finalPayload.address;
         }
-      } catch (err) {
-        console.warn("MiniKit user fetch error:", err);
+      } catch (e) {}
+    }
+
+    if (detectedAddr) {
+      realWorldIdUser = true;
+      const username = (MiniKit.user && MiniKit.user.username) ? '@' + MiniKit.user.username : await resolveUsername(detectedAddr);
+      setUserData(username, detectedAddr);
+      localStorage.setItem("myAddress", detectedAddr);
+      localStorage.setItem("myUsername", username);
+    } else {
+      let savedAddr = localStorage.getItem("myAddress");
+      let savedUser = localStorage.getItem("myUsername");
+      if (!savedAddr) {
+        const randomHex = Math.floor(Math.random() * 100000).toString(16);
+        savedAddr = '0xWLD000000000000000000000000000' + randomHex;
+        savedUser = '@Player_' + randomHex;
       }
+      setUserData(savedUser, savedAddr);
     }
   } else {
-    // Desktop / Testing Mode: ONLY for development and admin panel access
-    $('landingHint').textContent = 'Admin / Desktop Testing Mode Active';
-    let adminAddress = ADMIN_WALLET; // Forces Admin Wallet on desktop browser for testing & withdrawals
-    let adminUsername = "@Admin_TNV";
-    setUserData(adminUsername, adminAddress);
+    $('landingHint').textContent = 'Desktop Testing Mode (Admin Active)';
+    setUserData("@Admin_TNV", ADMIN_WALLET);
     realWorldIdUser = true;
   }
 
@@ -359,7 +372,7 @@ async function fetchLeaderboard() {
     let html = '';
     data.forEach((row, index) => {
       let rankClass = index === 0 ? 'top-1' : (index === 1 ? 'top-2' : (index === 2 ? 'top-3' : ''));
-      let shortWallet = row.wallet_address.startsWith('0xDEV') ? 'Dev_' + row.wallet_address.slice(-4) : row.wallet_address.slice(0, 6) + '...' + row.wallet_address.slice(-4);
+      let shortWallet = row.wallet_address.startsWith('0xDEV') || row.wallet_address.startsWith('0xWLD') ? 'User_' + row.wallet_address.slice(-4) : row.wallet_address.slice(0, 6) + '...' + row.wallet_address.slice(-4);
       html += `<div class="lb-item ${rankClass}"><span class="lb-rank">#${index + 1}</span><span class="lb-user">${shortWallet}</span><span class="lb-score">${row.tnv_balance} TNV</span></div>`;
     });
     lbContainer.innerHTML = html;
@@ -450,30 +463,6 @@ async function resolveUsername(address){
   return '@WLD_' + address.substring(2, 8);
 }
 
-async function performWalletAuth(silent = false){
-  if (!MiniKit.isInstalled()) return false;
-
-  try {
-    const { finalPayload } = await MiniKit.commandsAsync.walletAuth({
-      nonce: randomAlphaNumeric(24),
-      requestId: 'req_login_' + Date.now(),
-      expirationTime: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
-      notBefore: new Date(Date.now() - 60 * 1000),
-      statement: 'Sign in to TNV Duel Arena.',
-    });
-
-    if (finalPayload?.status === 'success' && finalPayload?.address){
-      realWorldIdUser = true;
-      const username = await resolveUsername(finalPayload.address);
-      setUserData(username, finalPayload.address);
-      return true;
-    }
-    return false;
-  } catch (err) {
-    return false;
-  }
-}
-
 // ----------------------------------------------------
 // PLAY BUTTON: STYLISH CUSTOM PAYMENT MODAL FLOW
 // ----------------------------------------------------
@@ -481,8 +470,9 @@ async function handlePlayButtonClick(){
   if (matchmakingActive) return;
 
   if (!myAddress) {
-    alert('User not initialized. Please reopen inside World App.');
-    return;
+    let savedAddr = localStorage.getItem("myAddress") || ADMIN_WALLET;
+    let savedUser = localStorage.getItem("myUsername") || '@Admin_TNV';
+    setUserData(savedUser, savedAddr);
   }
 
   const { data: usrData } = await supabaseClient.from('user_rewards').select('wld_balance').eq('wallet_address', myAddress).maybeSingle();
@@ -493,7 +483,6 @@ async function handlePlayButtonClick(){
     return;
   }
 
-  // Open Sleek Custom Payment Modal
   const isApproved = await openCustomPayModal(selectedFee);
   if (!isApproved) {
     return;
