@@ -29,7 +29,7 @@ window.addEventListener('DOMContentLoaded', async () => {
   try { MiniKit.install(WORLD_APP_ID); } catch(e) {}
 
   if (MiniKit.isInstalled()) {
-    $('landingHint').textContent = 'World App detected — Ready to Play';
+    $('landingHint').textContent = 'World App detected — Test Mode Active';
   } else {
     $('landingHint').textContent = 'Desktop Mode (Simulation active)';
   }
@@ -431,7 +431,7 @@ function randomAlphaNumeric(len){
 }
 
 // ----------------------------------------------------
-// PLAY BUTTON: MINI KIT TEST PAYMENT POPUP (Triggers real UI popup, uses Test Network)
+// PLAY BUTTON: REALISTIC PAYMENT POPUP SIMULATION
 // ----------------------------------------------------
 async function handlePlayButtonClick(){
   if (matchmakingActive) return;
@@ -441,54 +441,30 @@ async function handlePlayButtonClick(){
     return;
   }
 
-  // Trigger Official MiniKit Payment Popup (Staging / Test WLD Mode)
-  if (MiniKit.isInstalled()) {
-    $('start-btn').disabled = true;
+  const { data: usrData } = await supabaseClient.from('user_rewards').select('wld_balance').eq('wallet_address', myAddress).maybeSingle();
+  let currentWld = Number(usrData ? usrData.wld_balance : 100);
 
-    let paymentSuccessful = false;
-    try {
-      const paymentPayload = {
-        reference: 'ref_' + randomAlphaNumeric(16),
-        to: ADMIN_WALLET,
-        tokens: [
-          {
-            symbol: "WLD",
-            token_amount: selectedFee.toString(),
-          },
-        ],
-        description: `TNV Duel Arena Test Bet: ${selectedFee} WLD`,
-        network: "staging", // Forces World App to use Testnet/Staging WLD instead of real funds
-      };
-
-      const res = await MiniKit.commandsAsync.pay(paymentPayload);
-      const response = res?.finalPayload || res?.result || res;
-      paymentSuccessful = (response?.status === 'success');
-
-    } catch (err) {
-      console.warn("Payment error:", err);
-      paymentSuccessful = false;
-    }
-
-    if (!paymentSuccessful) {
-      alert("Payment was cancelled or failed.");
-      $('start-btn').disabled = false;
-      return;
-    }
-
-    await logMatchHistory(ADMIN_WALLET, 'ADMIN_FEE', selectedFee, `Test fee payment from ${myUsername || myAddress}`);
-
-  } else {
-    // Desktop simulation fallback deduction
-    const { data: usrData } = await supabaseClient.from('user_rewards').select('wld_balance').eq('wallet_address', myAddress).maybeSingle();
-    let currentWld = Number(usrData?.wld_balance || 100);
-    if (currentWld < selectedFee) {
-      alert(`Insufficient WLD Balance: ${currentWld.toFixed(2)}, Required: ${selectedFee}`);
-      return;
-    }
-    await supabaseClient.from('user_rewards').update({ wld_balance: Number((currentWld - selectedFee).toFixed(2)) }).eq('wallet_address', myAddress);
+  if (currentWld < selectedFee) {
+    alert(`Insufficient Test WLD! Balance: ${currentWld.toFixed(2)}, Required: ${selectedFee}`);
+    return;
   }
 
-  // Start Matchmaking after payment popup is approved
+  // Realistic World App Payment Popup Simulation
+  const confirmed = confirm(`[World App Payment]\n\nPay ${selectedFee} WLD to TNV Duel Arena?\nRecipient: ${ADMIN_WALLET.slice(0,6)}...${ADMIN_WALLET.slice(-4)}`);
+  
+  if (!confirmed) {
+    alert("Payment was cancelled.");
+    return;
+  }
+
+  let newWldBalance = Number((currentWld - selectedFee).toFixed(2));
+  await supabaseClient.from('user_rewards').update({ wld_balance: newWldBalance }).eq('wallet_address', myAddress);
+  
+  await logMatchHistory(ADMIN_WALLET, 'ADMIN_FEE', selectedFee, `Test fee payment from ${myUsername || myAddress}`);
+  
+  currentWldBalance = newWldBalance;
+  if ($('wld-balance-num')) $('wld-balance-num').innerText = currentWldBalance.toFixed(2);
+
   initMatchmakingAfterPayment();
 }
 
@@ -566,7 +542,14 @@ async function cancelMatchmaking(showAlert = true) {
   if (matchId) {
     try {
       await supabaseClient.from('matches').delete().eq('id', matchId).eq('status', 'waiting');
-      if (showAlert) alert(`Search cancelled.`);
+      if (showAlert) alert(`Search cancelled. Entry fee refunded.`);
+      
+      const { data: usrData } = await supabaseClient.from('user_rewards').select('wld_balance').eq('wallet_address', myAddress).maybeSingle();
+      let currentWld = Number(usrData ? usrData.wld_balance : 100);
+      let refundedWld = Number((currentWld + selectedFee).toFixed(2));
+      await supabaseClient.from('user_rewards').update({ wld_balance: refundedWld }).eq('wallet_address', myAddress);
+      currentWldBalance = refundedWld;
+      if ($('wld-balance-num')) $('wld-balance-num').innerText = currentWldBalance.toFixed(2);
     } catch(e) {}
   }
   resetToHome();
@@ -700,8 +683,6 @@ async function finalizeGame(){
   const isWin = myFinal > opFinal;
 
   const exactChipEarn = calculatePayout(matchFee); 
-  const totalPool = Number((matchFee * 2).toFixed(2)); 
-  const adminFeeAmount = Number(Math.max(0, totalPool - exactChipEarn).toFixed(2)); 
 
   if (myAddress && !sessionStorage.getItem(`settled_${matchId}_${myAddress}`)) {
       sessionStorage.setItem(`settled_${matchId}_${myAddress}`, "true");
