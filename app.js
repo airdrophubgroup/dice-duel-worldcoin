@@ -28,42 +28,15 @@ const $ = (id) => document.getElementById(id);
 window.addEventListener('DOMContentLoaded', async () => {
   try { MiniKit.install(WORLD_APP_ID); } catch(e) {}
 
-  let detectedAddr = null;
-  for (let i = 0; i < 5; i++) {
-    if (MiniKit.isInstalled()) {
-      detectedAddr = MiniKit.user && MiniKit.user.walletAddress ? MiniKit.user.walletAddress : null;
-      if (detectedAddr) break;
-    }
-    await new Promise(r => setTimeout(r, 500));
-  }
+  // UI me sign in button inject karna agar detect nahi hua
+  injectSignInButtonIfNeeded();
 
   if (MiniKit.isInstalled()) {
-    $('landingHint').textContent = 'Connecting with World App...';
+    $('landingHint').textContent = 'World App detected. Please sign in.';
     
-    if (!detectedAddr) {
-      try {
-        const { finalPayload } = await MiniKit.commandsAsync.walletAuth({
-          nonce: randomAlphaNumeric(24),
-          requestId: 'req_login_' + Date.now(),
-          expirationTime: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
-          notBefore: new Date(Date.now() - 60 * 1000),
-          statement: 'Sign in to TNV Duel Arena.',
-        });
-        if (finalPayload?.status === 'success' && finalPayload?.address) {
-          detectedAddr = finalPayload.address;
-        }
-      } catch (e) {}
-    }
-
+    let detectedAddr = MiniKit.user && MiniKit.user.walletAddress ? MiniKit.user.walletAddress : null;
     if (detectedAddr) {
-      realWorldIdUser = true;
-      const username = (MiniKit.user && MiniKit.user.username) ? '@' + MiniKit.user.username : await resolveUsername(detectedAddr);
-      setUserData(username, detectedAddr);
-      localStorage.setItem("myAddress", detectedAddr);
-      localStorage.setItem("myUsername", username);
-    } else {
-      $('landingHint').textContent = 'Please open inside World App!';
-      alert('Wallet connection failed. Please reopen inside World App.');
+      await authenticateUserSession(detectedAddr);
     }
   } else {
     $('landingHint').textContent = 'Please open inside World App!';
@@ -72,12 +45,70 @@ window.addEventListener('DOMContentLoaded', async () => {
     $('start-btn').innerText = 'OPEN IN WORLD APP';
   }
 
-  if (myAddress) {
+  initGlobalChat();
+  fetchLeaderboard();
+  await resumeGameIfActive();
+});
+
+function injectSignInButtonIfNeeded() {
+  const landingHint = $('landingHint');
+  if (landingHint && !document.getElementById('world-signin-btn')) {
+    const signInBtn = document.createElement('button');
+    signInBtn.id = 'world-signin-btn';
+    signInBtn.className = 'btn';
+    signInBtn.style.cssText = 'margin-top: 12px; padding: 12px 24px; background: var(--photon); color: #000; font-weight: 700; border-radius: 12px; border: none; cursor: pointer; display: block; margin-left: auto; margin-right: auto;';
+    signInBtn.innerText = '🔐 SIGN IN WITH WORLD ID';
+    signInBtn.onclick = triggerWorldIDWalletAuth;
+    landingHint.parentNode.insertBefore(signInBtn, landingHint.nextSibling);
+  }
+}
+
+async function triggerWorldIDWalletAuth() {
+  if (!MiniKit.isInstalled()) {
+    alert('Please open this app inside World App.');
+    return;
+  }
+
+  $('landingHint').textContent = 'Requesting World ID permission...';
+
+  try {
+    const { finalPayload } = await MiniKit.commandsAsync.walletAuth({
+      nonce: randomAlphaNumeric(24),
+      requestId: 'req_login_' + Date.now(),
+      expirationTime: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+      notBefore: new Date(Date.now() - 60 * 1000),
+      statement: 'Sign in to TNV Duel Arena to play & earn.',
+    });
+
+    if (finalPayload?.status === 'success' && finalPayload?.address) {
+      await authenticateUserSession(finalPayload.address);
+      const btn = document.getElementById('world-signin-btn');
+      if (btn) btn.style.display = 'none';
+    } else {
+      alert('Sign in permission denied or failed.');
+    }
+  } catch (err) {
+    alert('Error during World ID sign in: ' + err.message);
+  }
+}
+
+async function authenticateUserSession(address) {
+  realWorldIdUser = true;
+  const username = (MiniKit.user && MiniKit.user.username) ? '@' + MiniKit.user.username : await resolveUsername(address);
+  setUserData(username, address);
+  localStorage.setItem("myAddress", address);
+  localStorage.setItem("myUsername", username);
+  $('landingHint').textContent = 'Signed in successfully!';
+  
+  const btn = document.getElementById('world-signin-btn');
+  if (btn) btn.style.display = 'none';
+
+  if (address) {
     try {
       const { data: stuckMatches } = await supabaseClient
         .from('matches')
         .select('*')
-        .or(`p1_address.eq.${myAddress},p2_address.eq.${myAddress}`)
+        .or(`p1_address.eq.${address},p2_address.eq.${address}`)
         .eq('status', 'waiting');
 
       if (stuckMatches && stuckMatches.length > 0) {
@@ -100,11 +131,7 @@ window.addEventListener('DOMContentLoaded', async () => {
     cancelBtn.onclick = () => cancelMatchmaking(true);
     waitingOverlay.appendChild(cancelBtn);
   }
-
-  initGlobalChat();
-  fetchLeaderboard();
-  await resumeGameIfActive();
-});
+}
 
 window.addEventListener('beforeunload', () => {
   if (matchmakingActive && matchId && !gameActive) {
@@ -478,7 +505,7 @@ async function handlePlayButtonClick(){
   if (matchmakingActive) return;
 
   if (!myAddress) {
-    alert('Please open inside World App.');
+    alert('Please sign in with World ID first.');
     return;
   }
 
