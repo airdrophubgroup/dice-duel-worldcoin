@@ -18,7 +18,7 @@ let currentWldBalance = 100;
 
 let myTurnsLeft = 15;
 let isTimingLocked = false;
-let activeAdminReqId = "";
+let paymentResolveCallback = null;
 
 const CHAT_STORAGE_KEY = "tnv_global_chat_history";
 const CHAT_EXPIRY_MS = 24 * 60 * 60 * 1000;
@@ -431,7 +431,7 @@ function randomAlphaNumeric(len){
 }
 
 // ----------------------------------------------------
-// PLAY BUTTON: REALISTIC PAYMENT POPUP SIMULATION
+// PLAY BUTTON: STYLISH CUSTOM PAYMENT MODAL FLOW
 // ----------------------------------------------------
 async function handlePlayButtonClick(){
   if (matchmakingActive) return;
@@ -449,11 +449,9 @@ async function handlePlayButtonClick(){
     return;
   }
 
-  // Realistic World App Payment Popup Simulation
-  const confirmed = confirm(`[World App Payment]\n\nPay ${selectedFee} WLD to TNV Duel Arena?\nRecipient: ${ADMIN_WALLET.slice(0,6)}...${ADMIN_WALLET.slice(-4)}`);
-  
-  if (!confirmed) {
-    alert("Payment was cancelled.");
+  // Open Sleek Custom Payment Modal instead of boring browser confirm()
+  const isApproved = await openCustomPayModal(selectedFee);
+  if (!isApproved) {
     return;
   }
 
@@ -467,6 +465,22 @@ async function handlePlayButtonClick(){
 
   initMatchmakingAfterPayment();
 }
+
+function openCustomPayModal(fee) {
+  return new Promise((resolve) => {
+    paymentResolveCallback = resolve;
+    $('pay-modal-amount').innerText = `${Number(fee).toFixed(2)} WLD`;
+    $('custom-pay-modal').style.display = 'flex';
+  });
+}
+
+window.closeCustomPayModal = function(approved) {
+  $('custom-pay-modal').style.display = 'none';
+  if (paymentResolveCallback) {
+    paymentResolveCallback(approved);
+    paymentResolveCallback = null;
+  }
+};
 
 function selectFee(amount, element){
   if (matchmakingActive) return;

@@ -272,6 +272,42 @@
     </div>
   </div>
 
+  <!-- CUSTOM STYLISH PAYMENT MODAL (REPLACES BORING BROWSER CONFIRM) -->
+  <div id="custom-pay-modal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.8); backdrop-filter:blur(8px); z-index:9999; justify-content:center; align-items:flex-end;">
+    <div style="background:#131322; border:1px solid rgba(41,217,194,0.3); width:100%; max-width:480px; border-radius:24px 24px 0 0; padding:24px; box-shadow:0 -10px 40px rgba(0,0,0,0.9); font-family:'Space Grotesk', sans-serif; animation: slideUp 0.3s ease;">
+      
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
+        <div style="display:flex; align-items:center; gap:10px;">
+          <div style="width:38px; height:38px; background:rgba(41,217,194,0.15); border-radius:50%; display:flex; justify-content:center; align-items:center; color:var(--photon); font-size:18px;">🌐</div>
+          <div>
+            <div style="color:#fff; font-weight:700; font-size:16px;">World App Payment</div>
+            <div style="color:var(--slate); font-size:11.5px;">TNV Duel Arena Secure Gateway</div>
+          </div>
+        </div>
+        <button onclick="closeCustomPayModal(false)" style="background:none; border:none; color:var(--slate); font-size:20px; cursor:pointer;">✕</button>
+      </div>
+
+      <div style="background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.08); border-radius:16px; padding:18px; text-align:center; margin-bottom:22px;">
+        <div style="color:var(--slate); font-size:12px; margin-bottom:6px;">Requested Amount</div>
+        <div id="pay-modal-amount" style="color:var(--gold); font-size:30px; font-weight:800; font-family:'JetBrains Mono', monospace;">0.50 WLD</div>
+        <div style="color:#888; font-size:11px; margin-top:6px;">Recipient: <span style="font-family:'JetBrains Mono', monospace; color:var(--photon);">0x8c5b...b6a1</span></div>
+      </div>
+
+      <div style="display:flex; gap:12px;">
+        <button onclick="closeCustomPayModal(false)" style="flex:1; background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.12); color:#fff; padding:15px; border-radius:14px; font-weight:700; cursor:pointer; font-size:14px;">Cancel</button>
+        <button onclick="closeCustomPayModal(true)" style="flex:1; background:linear-gradient(135deg, var(--photon), #1fa299); border:none; color:#111120; padding:15px; border-radius:14px; font-weight:800; cursor:pointer; font-size:14px; box-shadow:0 4px 20px rgba(41,217,194,0.35);">Pay Now</button>
+      </div>
+
+    </div>
+  </div>
+
+  <style>
+  @keyframes slideUp {
+    from { transform: translateY(100%); }
+    to { transform: translateY(0); }
+  }
+  </style>
+
   <div id="waiting-overlay">
     <div class="scanner" id="searchScanner">
       <div class="rules-card" style="display:none"></div>
